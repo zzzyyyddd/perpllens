@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { perplAuthenticatedGet } from "@/app/lib/perpl-auth";
+import {
+  fetchPerplContext,
+  getPerplMarket,
+  perplPrice,
+} from "@/app/lib/perpl-public";
 
 export const dynamic = "force-dynamic";
 
@@ -57,12 +62,14 @@ function ausd(raw: string | undefined) {
 
 export async function GET() {
   try {
-    const [walletRaw, positionsRaw, fillsRaw, historyRaw] = await Promise.all([
-      perplAuthenticatedGet("/v1/trading/wallet"),
-      perplAuthenticatedGet("/v1/trading/positions"),
-      perplAuthenticatedGet("/v1/trading/fills?count=50"),
-      perplAuthenticatedGet("/v1/trading/position-history"),
-    ]);
+    const [walletRaw, positionsRaw, fillsRaw, historyRaw, context] =
+      await Promise.all([
+        perplAuthenticatedGet("/v1/trading/wallet"),
+        perplAuthenticatedGet("/v1/trading/positions"),
+        perplAuthenticatedGet("/v1/trading/fills?count=50"),
+        perplAuthenticatedGet("/v1/trading/position-history"),
+        fetchPerplContext(),
+      ]);
 
     const wallet = walletRaw as PerplWallet;
     const positions = positionsRaw as PerplCollection;
@@ -104,14 +111,24 @@ export async function GET() {
             ? Math.max(0, Math.round((closedAt - openedAt) / 1000))
             : null;
 
+        const market = getPerplMarket(context, item.mkt);
+
         return {
           positionId: item.pid ?? null,
           marketId: item.mkt ?? null,
+          market: market?.name ?? `Market ${item.mkt ?? "Unknown"}`,
+          symbol: market?.size_units ?? market?.symbol ?? null,
           side: item.sd === 1 ? "LONG" : item.sd === 2 ? "SHORT" : "UNKNOWN",
           size: item.s ?? null,
           leverage: typeof item.lv === "number" ? item.lv / 100 : null,
-          entryPriceRaw: item.ep ?? null,
-          exitPriceRaw: item.xp ?? null,
+          entryPrice: perplPrice(
+            item.ep,
+            market?.config.price_decimals
+          ),
+          exitPrice: perplPrice(
+            item.xp,
+            market?.config.price_decimals
+          ),
           grossPnl,
           fees: totalFees,
           netPnl,
