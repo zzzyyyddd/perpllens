@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import MarketChart from "./components/MarketChart";
+import RiskPanel from "./components/RiskPanel";
 
 type Market = {
   id: number;
@@ -422,17 +423,33 @@ export default function Home() {
             Loading market analytics...
           </div>
         ) : (
-          <MarketChart
-            marketName={
-              data?.markets.find((market) => market.id === selectedMarketId)?.name ??
-              "Market"
-            }
-            priceDecimals={
-              data?.markets.find((market) => market.id === selectedMarketId)
-                ?.config.price_decimals ?? 0
-            }
-            candles={candles}
-          />
+          <>
+            <MarketChart
+              marketName={
+                data?.markets.find((market) => market.id === selectedMarketId)?.name ??
+                "Market"
+              }
+              priceDecimals={
+                data?.markets.find((market) => market.id === selectedMarketId)
+                  ?.config.price_decimals ?? 0
+              }
+              candles={candles}
+            />
+
+            {data?.markets.find(
+              (market) => market.id === selectedMarketId
+            ) && (
+              <RiskPanel
+                market={
+                  data.markets.find(
+                    (market) => market.id === selectedMarketId
+                  )!
+                }
+                markets={data.markets}
+                candles={candles}
+              />
+            )}
+          </>
         )}
       </div>
 
