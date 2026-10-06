@@ -30,6 +30,26 @@ type PerplCollection = {
   [key: string]: unknown;
 };
 
+type PerplHistoryRecord = {
+  at?: {
+    t?: number;
+  };
+  mkt?: number;
+  pid?: number;
+  st?: number;
+  sd?: number;
+  ep?: number;
+  s?: number;
+  fee?: string;
+  cfee?: string;
+  lv?: number;
+  dpnl?: string;
+  fnd?: string;
+  pay?: string;
+  xp?: number;
+  rq?: number;
+};
+
 function ausd(raw: string | undefined) {
   if (!raw) return 0;
   return Number(raw) / 1_000_000;
@@ -47,6 +67,89 @@ export async function GET() {
     const wallet = walletRaw as PerplWallet;
     const positions = positionsRaw as PerplCollection;
     const fills = fillsRaw as PerplCollection;
+    const history = historyRaw as PerplCollection;
+
+    const historyRecords = Array.isArray(history.d)
+      ? (history.d as PerplHistoryRecord[])
+      : [];
+
+    const closedTrades = historyRecords
+      .filter(
+        (item) =>
+          item.st === 2 &&
+          typeof item.ep === "number" &&
+          typeof item.xp === "number"
+      )
+      .map((item) => {
+        const grossPnl = ausd(item.dpnl);
+        const totalFees = ausd(item.fee);
+        const netPnl =
+          grossPnl -
+          totalFees +
+          ausd(item.fnd) +
+          ausd(item.pay);
+
+        const opened = historyRecords.find(
+          (candidate) =>
+            candidate.pid === item.pid &&
+            candidate.st === 1 &&
+            typeof candidate.at?.t === "number"
+        );
+
+        const openedAt = opened?.at?.t ?? null;
+        const closedAt = item.at?.t ?? null;
+
+        const holdingTimeSeconds =
+          openedAt !== null && closedAt !== null
+            ? Math.max(0, Math.round((closedAt - openedAt) / 1000))
+            : null;
+
+        return {
+          positionId: item.pid ?? null,
+          marketId: item.mkt ?? null,
+          side: item.sd === 1 ? "LONG" : item.sd === 2 ? "SHORT" : "UNKNOWN",
+          size: item.s ?? null,
+          leverage: typeof item.lv === "number" ? item.lv / 100 : null,
+          entryPriceRaw: item.ep ?? null,
+          exitPriceRaw: item.xp ?? null,
+          grossPnl,
+          fees: totalFees,
+          netPnl,
+          holdingTimeSeconds,
+          openedAt,
+          closedAt,
+        };
+      });
+
+    const wins = closedTrades.filter((trade) => trade.netPnl > 0).length;
+    const losses = closedTrades.filter((trade) => trade.netPnl < 0).length;
+
+    const totalGrossPnl = closedTrades.reduce(
+      (sum, trade) => sum + trade.grossPnl,
+      0
+    );
+
+    const totalFees = closedTrades.reduce(
+      (sum, trade) => sum + trade.fees,
+      0
+    );
+
+    const totalNetPnl = closedTrades.reduce(
+      (sum, trade) => sum + trade.netPnl,
+      0
+    );
+
+    const holdingTimes = closedTrades
+      .map((trade) => trade.holdingTimeSeconds)
+      .filter((value): value is number => value !== null);
+
+    const averageHoldingTimeSeconds =
+      holdingTimes.length > 0
+        ? Math.round(
+            holdingTimes.reduce((sum, value) => sum + value, 0) /
+              holdingTimes.length
+          )
+        : null;
 
     const account = wallet.as?.[0];
     const stats = wallet.sts?.find((item) => item.id === account?.id);
@@ -88,6 +191,30 @@ export async function GET() {
         fills: Array.isArray(fills.d)
           ? fills.d
           : [],
+
+        performance: {
+          completedTrades: closedTrades.length,
+          wins,
+          losses,
+          winRate:
+            closedTrades.length > 0
+              ? (wins / closedTrades.length) * 100
+              : null,
+          totalGrossPnl,
+          totalFees,
+          totalNetPnl,
+          averageHoldingTimeSeconds,
+          bestTrade:
+            closedTrades.length > 0
+              ? Math.max(...closedTrades.map((trade) => trade.netPnl))
+              : null,
+          worstTrade:
+            closedTrades.length > 0
+              ? Math.min(...closedTrades.map((trade) => trade.netPnl))
+              : null,
+        },
+
+        closedTrades,
 
         positionHistory: historyRaw,
 
