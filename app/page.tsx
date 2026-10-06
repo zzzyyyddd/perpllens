@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import MarketChart from "./components/MarketChart";
 import RiskPanel from "./components/RiskPanel";
+import TraderIntelligence from "./components/TraderIntelligence";
 
 type Market = {
   id: number;
@@ -296,6 +297,8 @@ export default function Home() {
             />
           </div>
         </section>
+
+        <TraderIntelligence />
 
         <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
           <div className="flex flex-col gap-2 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
