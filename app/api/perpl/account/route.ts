@@ -37,10 +37,11 @@ function ausd(raw: string | undefined) {
 
 export async function GET() {
   try {
-    const [walletRaw, positionsRaw, fillsRaw] = await Promise.all([
+    const [walletRaw, positionsRaw, fillsRaw, historyRaw] = await Promise.all([
       perplAuthenticatedGet("/v1/trading/wallet"),
       perplAuthenticatedGet("/v1/trading/positions"),
       perplAuthenticatedGet("/v1/trading/fills?count=50"),
+      perplAuthenticatedGet("/v1/trading/position-history"),
     ]);
 
     const wallet = walletRaw as PerplWallet;
@@ -87,6 +88,8 @@ export async function GET() {
         fills: Array.isArray(fills.d)
           ? fills.d
           : [],
+
+        positionHistory: historyRaw,
 
         updatedAt: new Date().toISOString(),
       },
