@@ -2,6 +2,37 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type ClosedTrade = {
+  positionId: number | null;
+  marketId: number | null;
+  market: string;
+  symbol: string | null;
+  side: "LONG" | "SHORT" | "UNKNOWN";
+  size: number | null;
+  leverage: number | null;
+  entryPrice: number | null;
+  exitPrice: number | null;
+  grossPnl: number;
+  fees: number;
+  netPnl: number;
+  holdingTimeSeconds: number | null;
+  openedAt: number | null;
+  closedAt: number | null;
+};
+
+type Performance = {
+  completedTrades: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  totalGrossPnl: number;
+  totalFees: number;
+  totalNetPnl: number;
+  averageHoldingTimeSeconds: number | null;
+  bestTrade: number | null;
+  worstTrade: number | null;
+};
+
 type AccountData = {
   account: {
     address: string | null;
@@ -19,6 +50,8 @@ type AccountData = {
     openPositionCount: number;
     returnedFillCount: number;
   };
+  performance: Performance;
+  closedTrades: ClosedTrade[];
   positions: unknown[];
   fills: unknown[];
   updatedAt: string;
@@ -33,9 +66,60 @@ function money(value: number) {
   }).format(value);
 }
 
+function preciseMoney(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "—";
+
+  const abs = Math.abs(value);
+  const digits = abs > 0 && abs < 0.01 ? 6 : 2;
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+}
+
+function price(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "—";
+
+  const digits =
+    Math.abs(value) < 0.01 ? 6 :
+    Math.abs(value) < 1 ? 4 :
+    2;
+
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
+}
+
+function duration(seconds: number | null) {
+  if (seconds === null) return "—";
+
+  if (seconds < 60) return `${seconds}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remaining = seconds % 60;
+
+  if (minutes < 60) {
+    return `${minutes}m ${remaining}s`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return `${hours}h ${remainingMinutes}m`;
+}
+
 function shortAddress(address: string | null) {
   if (!address) return "—";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function pnlTone(value: number | null) {
+  if (value === null || value === 0) return "neutral" as const;
+  return value > 0 ? "positive" as const : "negative" as const;
 }
 
 export default function TraderIntelligence() {
@@ -74,6 +158,7 @@ export default function TraderIntelligence() {
   }, [loadAccount]);
 
   const account = data?.account;
+  const performance = data?.performance;
 
   return (
     <section className="mb-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
@@ -88,7 +173,7 @@ export default function TraderIntelligence() {
           </div>
 
           <p className="mt-1 text-sm text-zinc-500">
-            Live Perpl account activity and collateral intelligence.
+            Live Perpl account activity, performance and collateral intelligence.
           </p>
         </div>
 
@@ -135,7 +220,7 @@ export default function TraderIntelligence() {
               }
               sub={
                 account
-                  ? `${money(account.lockedCollateral)} locked`
+                  ? `${preciseMoney(account.lockedCollateral)} locked`
                   : "Available collateral"
               }
             />
@@ -143,20 +228,16 @@ export default function TraderIntelligence() {
             <Metric
               label="Realized PnL"
               value={
-                loading || !account ? "Loading..." : money(account.realizedPnl)
+                loading || !account
+                  ? "Loading..."
+                  : preciseMoney(account.realizedPnl)
               }
               sub={
                 account
-                  ? `${money(account.tradingFees)} trading fees`
+                  ? `${preciseMoney(account.tradingFees)} trading fees`
                   : "Realized trading result"
               }
-              tone={
-                account && account.realizedPnl > 0
-                  ? "positive"
-                  : account && account.realizedPnl < 0
-                    ? "negative"
-                    : "neutral"
-              }
+              tone={account ? pnlTone(account.realizedPnl) : "neutral"}
             />
 
             <Metric
@@ -164,17 +245,194 @@ export default function TraderIntelligence() {
               value={
                 loading || !account
                   ? "Loading..."
-                  : `${account.tradeCount} trades`
+                  : `${account.tradeCount} completed`
               }
               sub={
                 data
-                  ? `${data.activity.openPositionCount} open · ${data.activity.returnedFillCount} fills loaded`
+                  ? `${data.activity.openPositionCount} open · ${data.activity.returnedFillCount} fills`
                   : "Account activity"
               }
             />
           </div>
 
-          <div className="flex flex-col gap-3 px-6 py-4 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
+          <div className="border-t border-white/10 px-6 py-6">
+            <div className="mb-4">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
+                Performance Analytics
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                Derived from completed Perpl position history.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+              <MiniMetric
+                label="Completed"
+                value={performance ? String(performance.completedTrades) : "—"}
+              />
+
+              <MiniMetric
+                label="Win Rate"
+                value={
+                  performance?.winRate == null
+                    ? "—"
+                    : `${performance.winRate.toFixed(1)}%`
+                }
+              />
+
+              <MiniMetric
+                label="Net PnL"
+                value={
+                  performance
+                    ? preciseMoney(performance.totalNetPnl)
+                    : "—"
+                }
+                tone={
+                  performance
+                    ? pnlTone(performance.totalNetPnl)
+                    : "neutral"
+                }
+              />
+
+              <MiniMetric
+                label="Avg Hold"
+                value={
+                  performance
+                    ? duration(performance.averageHoldingTimeSeconds)
+                    : "—"
+                }
+              />
+
+              <MiniMetric
+                label="Best Trade"
+                value={
+                  performance
+                    ? preciseMoney(performance.bestTrade)
+                    : "—"
+                }
+                tone={
+                  performance
+                    ? pnlTone(performance.bestTrade)
+                    : "neutral"
+                }
+              />
+
+              <MiniMetric
+                label="Worst Trade"
+                value={
+                  performance
+                    ? preciseMoney(performance.worstTrade)
+                    : "—"
+                }
+                tone={
+                  performance
+                    ? pnlTone(performance.worstTrade)
+                    : "neutral"
+                }
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-white/10">
+            <div className="flex items-center justify-between px-6 py-5">
+              <div>
+                <h3 className="text-sm font-medium">Recent Trades</h3>
+                <p className="mt-1 text-xs text-zinc-600">
+                  Completed positions from authenticated Perpl history.
+                </p>
+              </div>
+
+              <span className="text-xs text-zinc-600">
+                {data?.closedTrades.length ?? 0} loaded
+              </span>
+            </div>
+
+            {data && data.closedTrades.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left">
+                  <thead className="border-y border-white/10 text-[10px] uppercase tracking-wider text-zinc-600">
+                    <tr>
+                      <th className="px-6 py-3 font-medium">Market</th>
+                      <th className="px-4 py-3 font-medium">Side</th>
+                      <th className="px-4 py-3 font-medium">Size</th>
+                      <th className="px-4 py-3 font-medium">Entry</th>
+                      <th className="px-4 py-3 font-medium">Exit</th>
+                      <th className="px-4 py-3 font-medium">Hold</th>
+                      <th className="px-4 py-3 font-medium">Fees</th>
+                      <th className="px-6 py-3 font-medium">Net PnL</th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-white/[0.06]">
+                    {data.closedTrades.slice(0, 10).map((trade) => (
+                      <tr key={trade.positionId ?? `${trade.marketId}-${trade.closedAt}`}>
+                        <td className="px-6 py-4">
+                          <p className="font-medium text-zinc-200">
+                            {trade.market}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-600">
+                            {trade.leverage ?? "—"}x
+                          </p>
+                        </td>
+
+                        <td className="px-4 py-4">
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-medium ${
+                              trade.side === "LONG"
+                                ? "bg-emerald-400/10 text-emerald-300"
+                                : trade.side === "SHORT"
+                                  ? "bg-red-400/10 text-red-300"
+                                  : "bg-white/5 text-zinc-400"
+                            }`}
+                          >
+                            {trade.side}
+                          </span>
+                        </td>
+
+                        <td className="px-4 py-4 font-mono text-sm text-zinc-300">
+                          {trade.size ?? "—"} {trade.symbol ?? ""}
+                        </td>
+
+                        <td className="px-4 py-4 font-mono text-sm text-zinc-300">
+                          {price(trade.entryPrice)}
+                        </td>
+
+                        <td className="px-4 py-4 font-mono text-sm text-zinc-300">
+                          {price(trade.exitPrice)}
+                        </td>
+
+                        <td className="px-4 py-4 font-mono text-sm text-zinc-400">
+                          {duration(trade.holdingTimeSeconds)}
+                        </td>
+
+                        <td className="px-4 py-4 font-mono text-sm text-zinc-400">
+                          {preciseMoney(trade.fees)}
+                        </td>
+
+                        <td
+                          className={`px-6 py-4 font-mono text-sm font-medium ${
+                            trade.netPnl > 0
+                              ? "text-emerald-400"
+                              : trade.netPnl < 0
+                                ? "text-red-400"
+                                : "text-zinc-300"
+                          }`}
+                        >
+                          {preciseMoney(trade.netPnl)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="border-t border-white/10 px-6 py-8 text-center text-sm text-zinc-600">
+                No completed trades yet.
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-white/10 px-6 py-4 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
             <span>
               Deposited{" "}
               <span className="font-mono text-zinc-300">
@@ -230,6 +488,34 @@ function Metric({
         {value}
       </p>
       <p className="mt-2 text-xs text-zinc-600">{sub}</p>
+    </div>
+  );
+}
+
+function MiniMetric({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "positive" | "negative";
+}) {
+  const valueClass =
+    tone === "positive"
+      ? "text-emerald-400"
+      : tone === "negative"
+        ? "text-red-400"
+        : "text-zinc-200";
+
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-black/20 p-4">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
+        {label}
+      </p>
+      <p className={`mt-2 font-mono text-sm font-medium ${valueClass}`}>
+        {value}
+      </p>
     </div>
   );
 }
