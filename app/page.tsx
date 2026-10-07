@@ -240,9 +240,22 @@ export default function Home() {
               </span>
             </div>
 
-            <p className="text-sm text-zinc-400">
-              Real-time trading intelligence & risk analytics for Perpl.
+            <p className="max-w-2xl text-sm leading-6 text-zinc-400">
+              Real-time Perpl intelligence from protocol to trader — live markets,
+              relative risk signals, and wallet analytics on Monad mainnet.
             </p>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
+                Perpl Live Data
+              </span>
+              <span className="rounded-full border border-violet-400/20 bg-violet-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-violet-300">
+                Monad Mainnet
+              </span>
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-cyan-300">
+                Envio Historical Index
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 text-sm">
