@@ -7,6 +7,7 @@ import {
 } from "@/app/lib/perpl-public";
 
 export const dynamic = "force-dynamic";
+export const preferredRegion = "sin1";
 
 type PerplAccount = {
   id?: number;
