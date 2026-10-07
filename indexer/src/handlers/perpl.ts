@@ -7,6 +7,7 @@ indexer.onEvent(
 
     context.PositionOpen.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.accountId,
       positionType: Number(p.positionType),
@@ -32,6 +33,7 @@ indexer.onEvent(
 
     context.PositionClose.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.accountId,
       positionType: Number(p.positionType),
@@ -52,6 +54,7 @@ indexer.onEvent(
 
     context.PositionIncrease.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.accountId,
       positionType: Number(p.positionType),
@@ -81,6 +84,7 @@ indexer.onEvent(
 
     context.PositionDecrease.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.accountId,
       positionType: Number(p.positionType),
@@ -104,6 +108,7 @@ indexer.onEvent(
 
     context.PositionInvert.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.accountId,
       positionType: Number(p.positionType),
@@ -132,6 +137,7 @@ indexer.onEvent(
 
     context.PositionLiquidation.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.posAccountId,
       positionType: Number(p.positionType),
@@ -160,6 +166,7 @@ indexer.onEvent(
 
     context.AccountCreatedEvent.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       account: p.account,
       accountId: p.id,
       blockNumber: BigInt(event.block.number),
@@ -176,6 +183,7 @@ indexer.onEvent(
 
     context.MakerOrderFill.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       perpId: p.perpId,
       accountId: p.accountId,
       orderId: p.orderId,
@@ -201,6 +209,7 @@ indexer.onEvent(
 
     context.TakerOrderFill.set({
       id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      logIndex: event.logIndex,
       entryPricePNS: p.entryPricePNS,
       collatPricePNS: p.collatPricePNS,
       pnlPricePNS: p.pnlPricePNS,
