@@ -173,6 +173,8 @@ export type PositionLifecycle = {
   closedAt: bigint | null;
   openingTransactionHash: string | null;
   closingTransactionHash: string | null;
+  openingLogIndex: number | null;
+  closingLogIndex: number | null;
   entryPricePNS: bigint | null;
   initialLotLNS: bigint | null;
   finalReason: "close" | "invert" | "liquidation" | null;
@@ -204,6 +206,8 @@ export function reconstructPositionLifecycles(
       closedAt: null,
       openingTransactionHash: null,
       closingTransactionHash: null,
+      openingLogIndex: null,
+      closingLogIndex: null,
       entryPricePNS: null,
       initialLotLNS: null,
       finalReason: null,
@@ -233,6 +237,8 @@ export function reconstructPositionLifecycles(
         closedAt: null,
         openingTransactionHash: event.transactionHash,
         closingTransactionHash: null,
+        openingLogIndex: event.logIndex,
+        closingLogIndex: null,
         entryPricePNS: event.pricePNS,
         initialLotLNS: event.lotLNS,
         finalReason: null,
@@ -292,6 +298,7 @@ export function reconstructPositionLifecycles(
       // a new position on the opposite side. Finish the old lifecycle.
       lifecycle.closedAt = event.timestamp;
       lifecycle.closingTransactionHash = event.transactionHash;
+      lifecycle.closingLogIndex = event.logIndex;
       lifecycle.finalReason = "invert";
       lifecycle.completeEnd = true;
 
@@ -306,6 +313,8 @@ export function reconstructPositionLifecycles(
         closedAt: null,
         openingTransactionHash: event.transactionHash,
         closingTransactionHash: null,
+        openingLogIndex: event.logIndex,
+        closingLogIndex: null,
         entryPricePNS: event.pricePNS,
         initialLotLNS: event.endLotLNS,
         finalReason: null,
@@ -319,6 +328,7 @@ export function reconstructPositionLifecycles(
 
     lifecycle.closedAt = event.timestamp;
     lifecycle.closingTransactionHash = event.transactionHash;
+    lifecycle.closingLogIndex = event.logIndex;
     lifecycle.finalReason = event.kind;
     lifecycle.completeEnd = true;
 
@@ -506,6 +516,53 @@ export function buildCompletedTrades(args: {
       if (
         event.timestamp < openedAt ||
         event.timestamp > closedAt
+      ) {
+        return false;
+      }
+
+      const isOpeningBoundary =
+        lifecycle.openingTransactionHash !== null &&
+        lifecycle.openingLogIndex !== null &&
+        sameTransaction(
+          event.transactionHash,
+          lifecycle.openingTransactionHash,
+        ) &&
+        event.logIndex === lifecycle.openingLogIndex;
+
+      const isClosingBoundary =
+        lifecycle.closingTransactionHash !== null &&
+        lifecycle.closingLogIndex !== null &&
+        sameTransaction(
+          event.transactionHash,
+          lifecycle.closingTransactionHash,
+        ) &&
+        event.logIndex === lifecycle.closingLogIndex;
+
+      // PositionInverted is one action that closes the old lifecycle and
+      // establishes the new side. Its taker fee belongs to the lifecycle
+      // whose PnL is realized by the inversion, so do not charge the same
+      // inversion event again as the new lifecycle's opening fee.
+      if (
+        isOpeningBoundary &&
+        event.kind === "invert"
+      ) {
+        return false;
+      }
+
+      if (
+        event.timestamp === openedAt &&
+        lifecycle.openingLogIndex !== null &&
+        !isOpeningBoundary &&
+        event.logIndex < lifecycle.openingLogIndex
+      ) {
+        return false;
+      }
+
+      if (
+        event.timestamp === closedAt &&
+        lifecycle.closingLogIndex !== null &&
+        !isClosingBoundary &&
+        event.logIndex > lifecycle.closingLogIndex
       ) {
         return false;
       }
