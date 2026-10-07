@@ -1,0 +1,104 @@
+type PositionOpen {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  positionType: Int!
+  leverageHdths: BigInt!
+  depositCNS: BigInt!
+  pnlCollateralizedCNS: BigInt!
+  pricePNS: BigInt!
+  lotLNS: BigInt!
+  insFeeCNS: BigInt!
+  protFeeCNS: BigInt!
+  priceResiduePNSQ16: BigInt!
+  blockNumber: BigInt!
+  transactionHash: String!
+}
+
+type PositionClose {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  positionType: Int!
+  pricePNS: BigInt!
+  deltaPnlCNS: BigInt!
+  fundingCNS: BigInt!
+  blockNumber: BigInt!
+  transactionHash: String!
+}
+
+type PositionIncrease {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  positionType: Int!
+  leverageHdths: BigInt!
+  startDepositCNS: BigInt!
+  endDepositCNS: BigInt!
+  pnlCollateralizedCNS: BigInt!
+  premiumPnlSettledCNS: BigInt!
+  maxNegPnlCollatBPS: BigInt!
+  pricePNS: BigInt!
+  startLotLNS: BigInt!
+  endLotLNS: BigInt!
+  insFeeCNS: BigInt!
+  protFeeCNS: BigInt!
+  priceResiduePNSQ16: BigInt!
+  blockNumber: BigInt!
+  transactionHash: String!
+}
+
+type PositionDecrease {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  positionType: Int!
+  startDepositCNS: BigInt!
+  endDepositCNS: BigInt!
+  startLotLNS: BigInt!
+  endLotLNS: BigInt!
+  deltaPnlCNS: BigInt!
+  fundingCNS: BigInt!
+  blockNumber: BigInt!
+  transactionHash: String!
+}
+
+type PositionInvert {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  positionType: Int!
+  leverageHdths: BigInt!
+  startDepositCNS: BigInt!
+  endDepositCNS: BigInt!
+  pnlCollateralizedCNS: BigInt!
+  pricePNS: BigInt!
+  startLotLNS: BigInt!
+  endLotLNS: BigInt!
+  deltaPnlCNS: BigInt!
+  fundingCNS: BigInt!
+  insFeeCNS: BigInt!
+  protFeeCNS: BigInt!
+  blockNumber: BigInt!
+  transactionHash: String!
+}
+
+type PositionLiquidation {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  positionType: Int!
+  markPricePNS: BigInt!
+  liqPricePNS: BigInt!
+  liqLotLNS: BigInt!
+  posLotLNS: BigInt!
+  deltaPnlCNS: BigInt!
+  fundingCNS: BigInt!
+  posAmountCNS: BigInt!
+  posDepositCNS: BigInt!
+  accAmountCNS: BigInt!
+  accBalanceCNS: BigInt!
+  onOrderBook: Boolean!
+  blockNumber: BigInt!
+  transactionHash: String!
+}

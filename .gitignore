@@ -42,3 +42,7 @@ next-env.d.ts
 
 # Local backups
 *.backup
+
+# Envio indexer
+indexer/node_modules/
+indexer/.envio/

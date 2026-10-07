@@ -1,0 +1,39 @@
+name: perpllens-indexer
+description: Perpl historical trading analytics on Monad
+
+chains:
+  - id: 143
+    start_block: 111206250
+    rpc:
+      - url: https://rpc.monad.xyz
+
+    contracts:
+      - name: PerplExchange
+        address:
+          - 0x34B6552d57a35a1D042CcAe1951BD1C370112a6F
+        abi_file_path: abis/Exchange.json
+        events:
+          - event: PositionOpenedV2
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: PositionClosed
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: PositionIncreasedV2
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: PositionDecreased
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: PositionInverted
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: PositionLiquidated
+            field_selection:
+              transaction_fields:
+                - hash
