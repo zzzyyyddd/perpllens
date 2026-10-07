@@ -4,6 +4,18 @@ import * as ed from "@noble/ed25519";
 const BASE_URL = "https://app.perpl.xyz/api";
 const CHAIN_ID = "143";
 
+export class PerplApiError extends Error {
+  status: number;
+  responseBody: string;
+
+  constructor(status: number, responseBody: string) {
+    super(`Perpl API ${status}: ${responseBody}`);
+    this.name = "PerplApiError";
+    this.status = status;
+    this.responseBody = responseBody;
+  }
+}
+
 function getCredentials() {
   const apiKey = process.env.PERPL_API_KEY;
   const secret = process.env.PERPL_API_KEY_SECRET?.replace(/^0x/, "");
@@ -64,7 +76,7 @@ export async function perplAuthenticatedGet(path: string) {
   const text = await response.text();
 
   if (!response.ok) {
-    throw new Error(`Perpl API ${response.status}: ${text}`);
+    throw new PerplApiError(response.status, text);
   }
 
   try {

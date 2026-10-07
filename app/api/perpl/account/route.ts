@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { perplAuthenticatedGet } from "@/app/lib/perpl-auth";
+import {
+  PerplApiError,
+  perplAuthenticatedGet,
+} from "@/app/lib/perpl-auth";
 import {
   fetchPerplContext,
   getPerplMarket,
@@ -244,6 +247,28 @@ export async function GET() {
       }
     );
   } catch (error) {
+    if (error instanceof PerplApiError && error.status === 451) {
+      console.warn(
+        "Authenticated Perpl data unavailable from deployment region"
+      );
+
+      return NextResponse.json(
+        {
+          status: "authenticated_unavailable",
+          reason: "upstream_region_restriction",
+          message:
+            "Authenticated Perpl account data is unavailable from this deployment region.",
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "private, max-age=60",
+          },
+        }
+      );
+    }
+
     console.error(
       "Perpl account API error:",
       error instanceof Error ? error.message : "Unknown error"

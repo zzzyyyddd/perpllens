@@ -33,6 +33,13 @@ type Performance = {
   worstTrade: number | null;
 };
 
+type AccountUnavailable = {
+  status: "authenticated_unavailable";
+  reason: "upstream_region_restriction";
+  message: string;
+  updatedAt: string;
+};
+
 type AccountData = {
   account: {
     address: string | null;
@@ -126,6 +133,8 @@ export default function TraderIntelligence() {
   const [data, setData] = useState<AccountData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [authenticatedUnavailable, setAuthenticatedUnavailable] =
+    useState<AccountUnavailable | null>(null);
 
   const loadAccount = useCallback(async () => {
     try {
@@ -137,9 +146,19 @@ export default function TraderIntelligence() {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      const result = (await response.json()) as AccountData;
+      const result = (await response.json()) as
+        | AccountData
+        | AccountUnavailable;
 
-      setData(result);
+      if ("status" in result) {
+        setAuthenticatedUnavailable(result);
+        setData(null);
+        setError("");
+        return;
+      }
+
+      setData(result as AccountData);
+      setAuthenticatedUnavailable(null);
       setError("");
     } catch (err) {
       console.error("Failed to load trader intelligence:", err);
@@ -152,10 +171,14 @@ export default function TraderIntelligence() {
   useEffect(() => {
     loadAccount();
 
+    if (authenticatedUnavailable) {
+      return;
+    }
+
     const interval = setInterval(loadAccount, 15_000);
 
     return () => clearInterval(interval);
-  }, [loadAccount]);
+  }, [loadAccount, authenticatedUnavailable]);
 
   const account = data?.account;
   const performance = data?.performance;
@@ -167,9 +190,15 @@ export default function TraderIntelligence() {
           <div className="flex items-center gap-3">
             <h2 className="font-semibold">Trader Intelligence</h2>
 
-            <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
-              Authenticated
-            </span>
+            {authenticatedUnavailable ? (
+              <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-amber-300">
+                Hosting Restricted
+              </span>
+            ) : (
+              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
+                Authenticated
+              </span>
+            )}
           </div>
 
           <p className="mt-1 text-sm text-zinc-500">
@@ -198,7 +227,31 @@ export default function TraderIntelligence() {
         </div>
       </div>
 
-      {error ? (
+      {authenticatedUnavailable ? (
+        <div className="px-6 py-10">
+          <div className="mx-auto max-w-2xl rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-5 py-5">
+            <div className="flex items-start gap-3">
+              <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-300" />
+
+              <div>
+                <p className="text-sm font-medium text-zinc-200">
+                  Authenticated account analytics unavailable from this hosting region
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-zinc-500">
+                  Perpl is rejecting authenticated API requests from the current
+                  server deployment region. Public protocol, market and risk
+                  intelligence remains live.
+                </p>
+
+                <p className="mt-3 text-xs text-zinc-600">
+                  No account data is simulated or substituted.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : error ? (
         <div className="px-6 py-10 text-center text-sm text-red-400">
           {error}
         </div>
