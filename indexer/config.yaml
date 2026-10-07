@@ -3,7 +3,7 @@ description: Perpl historical trading analytics on Monad
 
 chains:
   - id: 143
-    start_block: 111206250
+    start_block: 54773010
     rpc:
       - url: https://rpc.monad.xyz
 
@@ -13,6 +13,18 @@ chains:
           - 0x34B6552d57a35a1D042CcAe1951BD1C370112a6F
         abi_file_path: abis/Exchange.json
         events:
+          - event: AccountCreated
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: MakerOrderFilledV2
+            field_selection:
+              transaction_fields:
+                - hash
+          - event: TakerOrderFilledV2
+            field_selection:
+              transaction_fields:
+                - hash
           - event: PositionOpenedV2
             field_selection:
               transaction_fields:

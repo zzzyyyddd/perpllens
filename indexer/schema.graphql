@@ -108,3 +108,46 @@ type PositionLiquidation {
   timestamp: BigInt!
   transactionHash: String!
 }
+
+type AccountCreatedEvent {
+  id: ID!
+  account: String!
+  accountId: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+}
+
+type MakerOrderFill {
+  id: ID!
+  perpId: BigInt!
+  accountId: BigInt!
+  orderId: BigInt!
+  pricePNS: BigInt!
+  lotLNS: BigInt!
+  feeCNS: BigInt!
+  lockedBalanceCNS: BigInt!
+  amountCNS: BigInt!
+  balanceCNS: BigInt!
+  builderId: BigInt!
+  builderFeeCNS: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+}
+
+type TakerOrderFill {
+  id: ID!
+  entryPricePNS: BigInt!
+  collatPricePNS: BigInt!
+  pnlPricePNS: BigInt!
+  lotLNS: BigInt!
+  feeCNS: BigInt!
+  amountCNS: BigInt!
+  balanceCNS: BigInt!
+  builderId: BigInt!
+  builderFeeCNS: BigInt!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+  transactionHash: String!
+}

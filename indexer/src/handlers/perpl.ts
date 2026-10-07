@@ -152,3 +152,67 @@ indexer.onEvent(
     });
   }
 );
+
+indexer.onEvent(
+  { contract: "PerplExchange", event: "AccountCreated" },
+  async ({ event, context }) => {
+    const p = event.params;
+
+    context.AccountCreatedEvent.set({
+      id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      account: p.account,
+      accountId: p.id,
+      blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+      transactionHash: event.transaction.hash,
+    });
+  }
+);
+
+indexer.onEvent(
+  { contract: "PerplExchange", event: "MakerOrderFilledV2" },
+  async ({ event, context }) => {
+    const p = event.params;
+
+    context.MakerOrderFill.set({
+      id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      perpId: p.perpId,
+      accountId: p.accountId,
+      orderId: p.orderId,
+      pricePNS: p.pricePNS,
+      lotLNS: p.lotLNS,
+      feeCNS: p.feeCNS,
+      lockedBalanceCNS: p.lockedBalanceCNS,
+      amountCNS: p.amountCNS,
+      balanceCNS: p.balanceCNS,
+      builderId: p.builderId,
+      builderFeeCNS: p.builderFeeCNS,
+      blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+      transactionHash: event.transaction.hash,
+    });
+  }
+);
+
+indexer.onEvent(
+  { contract: "PerplExchange", event: "TakerOrderFilledV2" },
+  async ({ event, context }) => {
+    const p = event.params;
+
+    context.TakerOrderFill.set({
+      id: `${event.chainId}-${event.transaction.hash}-${event.logIndex}`,
+      entryPricePNS: p.entryPricePNS,
+      collatPricePNS: p.collatPricePNS,
+      pnlPricePNS: p.pnlPricePNS,
+      lotLNS: p.lotLNS,
+      feeCNS: p.feeCNS,
+      amountCNS: p.amountCNS,
+      balanceCNS: p.balanceCNS,
+      builderId: p.builderId,
+      builderFeeCNS: p.builderFeeCNS,
+      blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
+      transactionHash: event.transaction.hash,
+    });
+  }
+);
