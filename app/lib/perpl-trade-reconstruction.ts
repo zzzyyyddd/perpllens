@@ -351,3 +351,84 @@ export function holdingTimeSeconds(
 
   return lifecycle.closedAt - lifecycle.openedAt;
 }
+
+export type TakerFill = EventBase & {
+  entryPricePNS: bigint;
+  collatPricePNS: bigint;
+  pnlPricePNS: bigint;
+  lotLNS: bigint;
+  feeCNS: bigint;
+  amountCNS: bigint;
+  balanceCNS: bigint;
+  builderId: bigint;
+  builderFeeCNS: bigint;
+};
+
+export type AttributedTakerFill = {
+  lifecycleEvent: LifecycleEvent;
+  fill: TakerFill;
+  totalFeeCNS: bigint;
+};
+
+function sameTransaction(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+export function attributeTakerFills(
+  lifecycleEvents: readonly LifecycleEvent[],
+  fills: readonly TakerFill[],
+): AttributedTakerFill[] {
+  const fillsByTransaction = new Map<string, TakerFill[]>();
+
+  for (const fill of fills) {
+    const key = fill.transactionHash.toLowerCase();
+    const existing = fillsByTransaction.get(key) ?? [];
+    existing.push(fill);
+    fillsByTransaction.set(key, existing);
+  }
+
+  const attributed: AttributedTakerFill[] = [];
+
+  for (const event of lifecycleEvents) {
+    const candidates =
+      fillsByTransaction.get(event.transactionHash.toLowerCase()) ?? [];
+
+    const exact = candidates.filter(
+      (fill) =>
+        sameTransaction(fill.transactionHash, event.transactionHash) &&
+        fill.logIndex === event.logIndex + 1,
+    );
+
+    // Fail closed: never guess if ordering is missing or ambiguous.
+    if (exact.length !== 1) {
+      continue;
+    }
+
+    const fill = exact[0];
+
+    attributed.push({
+      lifecycleEvent: event,
+      fill,
+      totalFeeCNS: fill.feeCNS + fill.builderFeeCNS,
+    });
+  }
+
+  return attributed;
+}
+
+export function sumAttributedTakerFeesCNS(
+  attributed: readonly AttributedTakerFill[],
+): bigint {
+  return attributed.reduce(
+    (total, item) => total + item.totalFeeCNS,
+    BigInt(0),
+  );
+}
+
+export function calculateNetRealizedPnlCNS(args: {
+  grossPnlCNS: bigint;
+  fundingCNS: bigint;
+  takerFeesCNS: bigint;
+}): bigint {
+  return args.grossPnlCNS + args.fundingCNS - args.takerFeesCNS;
+}
