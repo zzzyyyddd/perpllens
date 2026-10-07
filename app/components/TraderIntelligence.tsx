@@ -1,77 +1,47 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 
-type ClosedTrade = {
-  positionId: number | null;
-  marketId: number | null;
-  market: string;
-  symbol: string | null;
+const DEFAULT_WALLET =
+  "0x65760dfA797B2d75A3f6E006CB0807f93E2D0dc3";
+
+type ActivePosition = {
+  perpetualId: number;
+  name: string;
+  symbol: string;
   side: "LONG" | "SHORT" | "UNKNOWN";
-  size: number | null;
-  leverage: number | null;
-  entryPrice: number | null;
-  exitPrice: number | null;
-  grossPnl: number;
-  fees: number;
-  netPnl: number;
-  holdingTimeSeconds: number | null;
-  openedAt: number | null;
-  closedAt: number | null;
+  size: number;
+  collateral: number;
+  entryPrice: number;
+  markPrice: number;
+  markPriceValid: boolean;
+  pnl: number;
+  deltaPnl: number;
+  premiumPnl: number;
+  entryBlock: number;
 };
 
-type Performance = {
-  completedTrades: number;
-  wins: number;
-  losses: number;
-  winRate: number | null;
-  totalGrossPnl: number;
-  totalFees: number;
-  totalNetPnl: number;
-  averageHoldingTimeSeconds: number | null;
-  bestTrade: number | null;
-  worstTrade: number | null;
-};
-
-type AccountUnavailable = {
-  status: "authenticated_unavailable";
-  reason: "upstream_region_restriction";
-  message: string;
-  updatedAt: string;
-};
-
-type AccountData = {
+type WalletData = {
+  status: "ok";
+  source: "monad_mainnet";
+  chainId: number;
   account: {
-    address: string | null;
-    accountId: number | null;
-    collateral: number;
-    lockedCollateral: number;
-    availableCollateral: number;
-    totalDeposited: number;
-    totalWithdrawn: number;
-    realizedPnl: number;
-    tradingFees: number;
-    tradeCount: number;
+    accountId: number;
+    address: string;
+    balance: number;
+    lockedBalance: number;
+    availableBalance: number;
+    frozen: number;
+    activePerpetualIds: number[];
+    activePositions: ActivePosition[];
   };
-  activity: {
-    openPositionCount: number;
-    returnedFillCount: number;
-  };
-  performance: Performance;
-  closedTrades: ClosedTrade[];
-  positions: unknown[];
-  fills: unknown[];
   updatedAt: string;
 };
 
-function money(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
+type ApiError = {
+  status: string;
+  message: string;
+};
 
 function preciseMoney(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "—";
@@ -90,33 +60,13 @@ function preciseMoney(value: number | null) {
 function price(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "—";
 
-  const digits =
-    Math.abs(value) < 0.01 ? 6 :
-    Math.abs(value) < 1 ? 4 :
-    2;
+  const abs = Math.abs(value);
+  const digits = abs < 0.01 ? 6 : abs < 1 ? 4 : 2;
 
   return `$${value.toLocaleString("en-US", {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })}`;
-}
-
-function duration(seconds: number | null) {
-  if (seconds === null) return "—";
-
-  if (seconds < 60) return `${seconds}s`;
-
-  const minutes = Math.floor(seconds / 60);
-  const remaining = seconds % 60;
-
-  if (minutes < 60) {
-    return `${minutes}m ${remaining}s`;
-  }
-
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-
-  return `${hours}h ${remainingMinutes}m`;
 }
 
 function shortAddress(address: string | null) {
@@ -130,138 +80,166 @@ function pnlTone(value: number | null) {
 }
 
 export default function TraderIntelligence() {
-  const [data, setData] = useState<AccountData | null>(null);
+  const [input, setInput] = useState(DEFAULT_WALLET);
+  const [wallet, setWallet] = useState(DEFAULT_WALLET);
+  const [data, setData] = useState<WalletData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [authenticatedUnavailable, setAuthenticatedUnavailable] =
-    useState<AccountUnavailable | null>(null);
 
-  const loadAccount = useCallback(async () => {
+  const loadWallet = useCallback(async (address: string) => {
+    setLoading(true);
+
     try {
-      const response = await fetch("/api/perpl/account", {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/perpl/wallet?address=${encodeURIComponent(address)}`,
+        { cache: "no-store" }
+      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      const result = (await response.json()) as WalletData | ApiError;
+
+      if (
+        !response.ok ||
+        result.status !== "ok" ||
+        !("account" in result)
+      ) {
+        throw new Error(
+          "message" in result ? result.message : `HTTP ${response.status}`
+        );
       }
 
-      const result = (await response.json()) as
-        | AccountData
-        | AccountUnavailable;
-
-      if ("status" in result) {
-        setAuthenticatedUnavailable(result);
-        setData(null);
-        setError("");
-        return;
-      }
-
-      setData(result as AccountData);
-      setAuthenticatedUnavailable(null);
+      setData(result);
       setError("");
     } catch (err) {
-      console.error("Failed to load trader intelligence:", err);
-      setError("Unable to load authenticated trader data.");
+      console.error("Failed to load onchain trader intelligence:", err);
+      setData(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to read this Perpl account from Monad."
+      );
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadAccount();
+    loadWallet(wallet);
 
-    if (authenticatedUnavailable) {
+    const interval = setInterval(() => {
+      loadWallet(wallet);
+    }, 15_000);
+
+    return () => clearInterval(interval);
+  }, [loadWallet, wallet]);
+
+  function analyze(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const next = input.trim();
+
+    if (!next) return;
+
+    if (next === wallet) {
+      loadWallet(next);
       return;
     }
 
-    const interval = setInterval(loadAccount, 15_000);
-
-    return () => clearInterval(interval);
-  }, [loadAccount, authenticatedUnavailable]);
+    setWallet(next);
+  }
 
   const account = data?.account;
-  const performance = data?.performance;
 
   return (
     <section className="mb-10 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025]">
-      <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h2 className="font-semibold">Trader Intelligence</h2>
+      <div className="border-b border-white/10 px-6 py-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="font-semibold">Trader Intelligence</h2>
 
-            {authenticatedUnavailable ? (
-              <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-amber-300">
-                Hosting Restricted
-              </span>
-            ) : (
               <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-emerald-300">
-                Authenticated
+                Onchain Live
               </span>
-            )}
+
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider text-zinc-400">
+                Monad 143
+              </span>
+            </div>
+
+            <p className="mt-2 text-sm text-zinc-500">
+              Search any Perpl wallet and inspect its live account and open
+              positions directly from the Perpl Exchange contract on Monad.
+            </p>
           </div>
 
-          <p className="mt-1 text-sm text-zinc-500">
-            Live Perpl account activity, performance and collateral intelligence.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {account && (
-            <div className="text-right text-xs">
-              <p className="font-mono text-zinc-300">
-                {shortAddress(account.address)}
-              </p>
-              <p className="mt-1 text-zinc-600">
-                Account #{account.accountId ?? "—"}
-              </p>
-            </div>
-          )}
-
-          <button
-            onClick={loadAccount}
-            className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300 transition hover:bg-white/[0.05]"
+          <form
+            onSubmit={analyze}
+            className="flex w-full max-w-2xl flex-col gap-2 sm:flex-row"
           >
-            Refresh
-          </button>
+            <input
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              spellCheck={false}
+              aria-label="Perpl wallet address"
+              placeholder="0x wallet address"
+              className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 font-mono text-xs text-zinc-200 outline-none transition placeholder:text-zinc-700 focus:border-white/20"
+            />
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-lg border border-white/10 bg-white/[0.05] px-4 py-2.5 text-xs font-medium text-zinc-200 transition hover:bg-white/[0.08] disabled:cursor-wait disabled:opacity-50"
+            >
+              {loading ? "Reading..." : "Analyze"}
+            </button>
+          </form>
         </div>
       </div>
 
-      {authenticatedUnavailable ? (
+      {error ? (
         <div className="px-6 py-10">
-          <div className="mx-auto max-w-2xl rounded-xl border border-amber-400/15 bg-amber-400/[0.04] px-5 py-5">
-            <div className="flex items-start gap-3">
-              <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-amber-300" />
-
-              <div>
-                <p className="text-sm font-medium text-zinc-200">
-                  Authenticated account analytics unavailable from this hosting region
-                </p>
-
-                <p className="mt-2 text-sm leading-6 text-zinc-500">
-                  Perpl is rejecting authenticated API requests from the current
-                  server deployment region. Public protocol, market and risk
-                  intelligence remains live.
-                </p>
-
-                <p className="mt-3 text-xs text-zinc-600">
-                  No account data is simulated or substituted.
-                </p>
-              </div>
-            </div>
+          <div className="mx-auto max-w-2xl rounded-xl border border-red-400/15 bg-red-400/[0.04] px-5 py-5">
+            <p className="text-sm font-medium text-red-300">
+              Wallet lookup unavailable
+            </p>
+            <p className="mt-2 text-sm leading-6 text-zinc-500">{error}</p>
+            <p className="mt-3 text-xs text-zinc-600">
+              Enter an EVM address with a Perpl account on Monad.
+            </p>
           </div>
-        </div>
-      ) : error ? (
-        <div className="px-6 py-10 text-center text-sm text-red-400">
-          {error}
         </div>
       ) : (
         <>
+          <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-mono text-sm text-zinc-200">
+                {account ? shortAddress(account.address) : "Reading wallet..."}
+              </p>
+              <p className="mt-1 text-xs text-zinc-600">
+                {account
+                  ? `Perpl Account #${account.accountId}`
+                  : "Resolving Perpl account"}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+              <span>Perpl Exchange</span>
+              <span className="text-zinc-700">•</span>
+              <span>Monad Mainnet</span>
+              <span className="text-zinc-700">•</span>
+              <span className="text-emerald-400">Contract Read</span>
+            </div>
+          </div>
+
           <div className="grid gap-px bg-white/10 sm:grid-cols-2 xl:grid-cols-4">
             <Metric
-              label="Collateral"
-              value={loading || !account ? "Loading..." : money(account.collateral)}
-              sub="Perpl account balance"
+              label="Balance"
+              value={
+                loading || !account
+                  ? "Loading..."
+                  : preciseMoney(account.balance)
+              }
+              sub="Perpl collateral balance"
             />
 
             <Metric
@@ -269,233 +247,151 @@ export default function TraderIntelligence() {
               value={
                 loading || !account
                   ? "Loading..."
-                  : money(account.availableCollateral)
+                  : preciseMoney(account.availableBalance)
               }
-              sub={
-                account
-                  ? `${preciseMoney(account.lockedCollateral)} locked`
-                  : "Available collateral"
-              }
+              sub="Available collateral"
             />
 
             <Metric
-              label="Realized PnL"
+              label="Locked"
               value={
                 loading || !account
                   ? "Loading..."
-                  : preciseMoney(account.realizedPnl)
+                  : preciseMoney(account.lockedBalance)
               }
-              sub={
-                account
-                  ? `${preciseMoney(account.tradingFees)} trading fees`
-                  : "Realized trading result"
-              }
-              tone={account ? pnlTone(account.realizedPnl) : "neutral"}
+              sub="Account-level locked balance"
             />
 
             <Metric
-              label="Trading Activity"
+              label="Open Positions"
               value={
                 loading || !account
                   ? "Loading..."
-                  : `${account.tradeCount} completed`
+                  : String(account.activePositions.length)
               }
-              sub={
-                data
-                  ? `${data.activity.openPositionCount} open · ${data.activity.returnedFillCount} fills`
-                  : "Account activity"
-              }
+              sub="Decoded from position bitmap"
             />
-          </div>
-
-          <div className="border-t border-white/10 px-6 py-6">
-            <div className="mb-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-zinc-500">
-                Performance Analytics
-              </p>
-              <p className="mt-1 text-xs text-zinc-600">
-                Derived from completed Perpl position history.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-              <MiniMetric
-                label="Completed"
-                value={performance ? String(performance.completedTrades) : "—"}
-              />
-
-              <MiniMetric
-                label="Win Rate"
-                value={
-                  performance?.winRate == null
-                    ? "—"
-                    : `${performance.winRate.toFixed(1)}%`
-                }
-              />
-
-              <MiniMetric
-                label="Net PnL"
-                value={
-                  performance
-                    ? preciseMoney(performance.totalNetPnl)
-                    : "—"
-                }
-                tone={
-                  performance
-                    ? pnlTone(performance.totalNetPnl)
-                    : "neutral"
-                }
-              />
-
-              <MiniMetric
-                label="Avg Hold"
-                value={
-                  performance
-                    ? duration(performance.averageHoldingTimeSeconds)
-                    : "—"
-                }
-              />
-
-              <MiniMetric
-                label="Best Trade"
-                value={
-                  performance
-                    ? preciseMoney(performance.bestTrade)
-                    : "—"
-                }
-                tone={
-                  performance
-                    ? pnlTone(performance.bestTrade)
-                    : "neutral"
-                }
-              />
-
-              <MiniMetric
-                label="Worst Trade"
-                value={
-                  performance
-                    ? preciseMoney(performance.worstTrade)
-                    : "—"
-                }
-                tone={
-                  performance
-                    ? pnlTone(performance.worstTrade)
-                    : "neutral"
-                }
-              />
-            </div>
           </div>
 
           <div className="border-t border-white/10">
-            <div className="flex items-center justify-between px-6 py-5">
+            <div className="flex flex-col gap-2 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-sm font-medium">Recent Trades</h3>
+                <h3 className="text-sm font-medium">Active Positions</h3>
                 <p className="mt-1 text-xs text-zinc-600">
-                  Completed positions from authenticated Perpl history.
+                  Current Perpl positions read directly from Monad mainnet.
                 </p>
               </div>
 
               <span className="text-xs text-zinc-600">
-                {data?.closedTrades.length ?? 0} loaded
+                {account
+                  ? `${account.activePositions.length} open`
+                  : "Loading..."}
               </span>
             </div>
 
-            {data && data.closedTrades.length > 0 ? (
+            {account && account.activePositions.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-left">
+                <table className="w-full min-w-[980px] text-left">
                   <thead className="border-y border-white/10 text-[10px] uppercase tracking-wider text-zinc-600">
                     <tr>
                       <th className="px-6 py-3 font-medium">Market</th>
                       <th className="px-4 py-3 font-medium">Side</th>
                       <th className="px-4 py-3 font-medium">Size</th>
                       <th className="px-4 py-3 font-medium">Entry</th>
-                      <th className="px-4 py-3 font-medium">Exit</th>
-                      <th className="px-4 py-3 font-medium">Hold</th>
-                      <th className="px-4 py-3 font-medium">Fees</th>
-                      <th className="px-6 py-3 font-medium">Net PnL</th>
+                      <th className="px-4 py-3 font-medium">Mark</th>
+                      <th className="px-4 py-3 font-medium">Collateral</th>
+                      <th className="px-4 py-3 font-medium">Unrealized PnL</th>
+                      <th className="px-6 py-3 font-medium">Entry Block</th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-white/[0.06]">
-                    {data.closedTrades.slice(0, 10).map((trade) => (
-                      <tr key={trade.positionId ?? `${trade.marketId}-${trade.closedAt}`}>
+                    {account.activePositions.map((position) => (
+                      <tr key={position.perpetualId}>
                         <td className="px-6 py-4">
                           <p className="font-medium text-zinc-200">
-                            {trade.market}
+                            {position.name}
                           </p>
-                          <p className="mt-1 text-xs text-zinc-600">
-                            {trade.leverage ?? "—"}x
+                          <p className="mt-1 font-mono text-xs text-zinc-600">
+                            Perp #{position.perpetualId}
                           </p>
                         </td>
 
                         <td className="px-4 py-4">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-medium ${
-                              trade.side === "LONG"
+                              position.side === "LONG"
                                 ? "bg-emerald-400/10 text-emerald-300"
-                                : trade.side === "SHORT"
+                                : position.side === "SHORT"
                                   ? "bg-red-400/10 text-red-300"
                                   : "bg-white/5 text-zinc-400"
                             }`}
                           >
-                            {trade.side}
+                            {position.side}
                           </span>
                         </td>
 
                         <td className="px-4 py-4 font-mono text-sm text-zinc-300">
-                          {trade.size ?? "—"} {trade.symbol ?? ""}
+                          {position.size} {position.symbol}
                         </td>
 
                         <td className="px-4 py-4 font-mono text-sm text-zinc-300">
-                          {price(trade.entryPrice)}
+                          {price(position.entryPrice)}
                         </td>
 
                         <td className="px-4 py-4 font-mono text-sm text-zinc-300">
-                          {price(trade.exitPrice)}
+                          {position.markPriceValid
+                            ? price(position.markPrice)
+                            : "Invalid"}
                         </td>
 
-                        <td className="px-4 py-4 font-mono text-sm text-zinc-400">
-                          {duration(trade.holdingTimeSeconds)}
-                        </td>
-
-                        <td className="px-4 py-4 font-mono text-sm text-zinc-400">
-                          {preciseMoney(trade.fees)}
+                        <td className="px-4 py-4 font-mono text-sm text-zinc-300">
+                          {preciseMoney(position.collateral)}
                         </td>
 
                         <td
-                          className={`px-6 py-4 font-mono text-sm font-medium ${
-                            trade.netPnl > 0
+                          className={`px-4 py-4 font-mono text-sm font-medium ${
+                            position.pnl > 0
                               ? "text-emerald-400"
-                              : trade.netPnl < 0
+                              : position.pnl < 0
                                 ? "text-red-400"
                                 : "text-zinc-300"
                           }`}
                         >
-                          {preciseMoney(trade.netPnl)}
+                          {preciseMoney(position.pnl)}
+                        </td>
+
+                        <td className="px-6 py-4 font-mono text-sm text-zinc-500">
+                          {position.entryBlock.toLocaleString("en-US")}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
+            ) : loading ? (
               <div className="border-t border-white/10 px-6 py-8 text-center text-sm text-zinc-600">
-                No completed trades yet.
+                Reading position state from Monad...
+              </div>
+            ) : (
+              <div className="border-t border-white/10 px-6 py-8 text-center">
+                <p className="text-sm text-zinc-400">No open positions.</p>
+                <p className="mt-2 text-xs text-zinc-600">
+                  Position bitmap is currently empty for this Perpl account.
+                </p>
               </div>
             )}
           </div>
 
           <div className="flex flex-col gap-3 border-t border-white/10 px-6 py-4 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              Deposited{" "}
-              <span className="font-mono text-zinc-300">
-                {account ? money(account.totalDeposited) : "—"}
+              Source{" "}
+              <span className="text-zinc-300">
+                Perpl Exchange · Monad Mainnet
               </span>
-              {" · "}
-              Withdrawn{" "}
-              <span className="font-mono text-zinc-300">
-                {account ? money(account.totalWithdrawn) : "—"}
-              </span>
+              {account?.frozen ? (
+                <span className="ml-2 text-amber-300">· Account frozen</span>
+              ) : null}
             </span>
 
             <span>
@@ -505,7 +401,7 @@ export default function TraderIntelligence() {
                     minute: "2-digit",
                     second: "2-digit",
                   })}`
-                : "Waiting for account data"}
+                : "Waiting for onchain data"}
             </span>
           </div>
         </>
@@ -541,34 +437,6 @@ function Metric({
         {value}
       </p>
       <p className="mt-2 text-xs text-zinc-600">{sub}</p>
-    </div>
-  );
-}
-
-function MiniMetric({
-  label,
-  value,
-  tone = "neutral",
-}: {
-  label: string;
-  value: string;
-  tone?: "neutral" | "positive" | "negative";
-}) {
-  const valueClass =
-    tone === "positive"
-      ? "text-emerald-400"
-      : tone === "negative"
-        ? "text-red-400"
-        : "text-zinc-200";
-
-  return (
-    <div className="rounded-xl border border-white/[0.07] bg-black/20 p-4">
-      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-600">
-        {label}
-      </p>
-      <p className={`mt-2 font-mono text-sm font-medium ${valueClass}`}>
-        {value}
-      </p>
     </div>
   );
 }
