@@ -431,8 +431,8 @@ export default function Home() {
           )}
         </section>
 
-        <div className="mx-auto w-full max-w-7xl px-6">
-        {candlesLoading && candles.length === 0 ? (
+        <div className="w-full">
+          {candlesLoading && candles.length === 0 ? (
           <div className="mt-8 flex h-[300px] items-center justify-center rounded-2xl border border-white/10 bg-[#0d1014] text-sm text-slate-500">
             Loading market analytics...
           </div>
@@ -467,9 +467,9 @@ export default function Home() {
         )}
       </div>
 
-      <footer className="mt-6 flex flex-col gap-2 text-xs text-zinc-600 sm:flex-row sm:justify-between">
-          <span>PerplLens · Monad Mainnet</span>
-          <span>Live data · Auto-refresh 10s</span>
+      <footer className="mt-8 flex flex-col gap-2 border-t border-white/10 pt-5 text-xs text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
+          <span>PerplLens · Perpl intelligence on Monad Mainnet</span>
+          <span>Perpl live data · Envio historical index · Auto-refresh 30s</span>
         </footer>
       </div>
     </main>
