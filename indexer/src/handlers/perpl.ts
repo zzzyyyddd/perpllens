@@ -19,6 +19,7 @@ indexer.onEvent(
       protFeeCNS: p.protFeeCNS,
       priceResiduePNSQ16: p.priceResiduePNSQ16,
       blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
       transactionHash: event.transaction.hash,
     });
   }
@@ -38,6 +39,7 @@ indexer.onEvent(
       deltaPnlCNS: p.deltaPnlCNS,
       fundingCNS: p.fundingCNS,
       blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
       transactionHash: event.transaction.hash,
     });
   }
@@ -66,6 +68,7 @@ indexer.onEvent(
       protFeeCNS: p.protFeeCNS,
       priceResiduePNSQ16: p.priceResiduePNSQ16,
       blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
       transactionHash: event.transaction.hash,
     });
   }
@@ -88,6 +91,7 @@ indexer.onEvent(
       deltaPnlCNS: p.deltaPnlCNS,
       fundingCNS: p.fundingCNS,
       blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
       transactionHash: event.transaction.hash,
     });
   }
@@ -115,6 +119,7 @@ indexer.onEvent(
       insFeeCNS: p.insFeeCNS,
       protFeeCNS: p.protFeeCNS,
       blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
       transactionHash: event.transaction.hash,
     });
   }
@@ -142,6 +147,7 @@ indexer.onEvent(
       accBalanceCNS: p.accBalanceCNS,
       onOrderBook: p.onOrderBook,
       blockNumber: BigInt(event.block.number),
+      timestamp: BigInt(event.block.timestamp),
       transactionHash: event.transaction.hash,
     });
   }
