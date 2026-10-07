@@ -578,3 +578,167 @@ export function buildCompletedTrades(args: {
     return a.closedAt < b.closedAt ? -1 : 1;
   });
 }
+
+export type TraderAnalytics = {
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  breakeven: number;
+  winRate: number | null;
+  totalNetPnlCNS: bigint;
+  grossProfitCNS: bigint;
+  grossLossCNS: bigint;
+  profitFactor: number | null;
+  bestTradeCNS: bigint | null;
+  worstTradeCNS: bigint | null;
+  averageHoldingTimeSeconds: number | null;
+  longestWinningStreak: number;
+  longestLosingStreak: number;
+};
+
+export function calculateTraderAnalytics(
+  trades: readonly CompletedTrade[],
+): TraderAnalytics {
+  const ordered = [...trades].sort((a, b) => {
+    if (a.closedAt === b.closedAt) return 0;
+    return a.closedAt < b.closedAt ? -1 : 1;
+  });
+
+  let wins = 0;
+  let losses = 0;
+  let breakeven = 0;
+
+  let totalNetPnlCNS = BigInt(0);
+  let grossProfitCNS = BigInt(0);
+  let grossLossCNS = BigInt(0);
+  let totalHoldingSeconds = BigInt(0);
+
+  let bestTradeCNS: bigint | null = null;
+  let worstTradeCNS: bigint | null = null;
+
+  let currentWinningStreak = 0;
+  let currentLosingStreak = 0;
+  let longestWinningStreak = 0;
+  let longestLosingStreak = 0;
+
+  for (const trade of ordered) {
+    totalNetPnlCNS += trade.netPnlCNS;
+    totalHoldingSeconds += trade.holdingTimeSeconds;
+
+    if (
+      bestTradeCNS === null ||
+      trade.netPnlCNS > bestTradeCNS
+    ) {
+      bestTradeCNS = trade.netPnlCNS;
+    }
+
+    if (
+      worstTradeCNS === null ||
+      trade.netPnlCNS < worstTradeCNS
+    ) {
+      worstTradeCNS = trade.netPnlCNS;
+    }
+
+    if (trade.netPnlCNS > BigInt(0)) {
+      wins += 1;
+      grossProfitCNS += trade.netPnlCNS;
+
+      currentWinningStreak += 1;
+      currentLosingStreak = 0;
+
+      longestWinningStreak = Math.max(
+        longestWinningStreak,
+        currentWinningStreak,
+      );
+    } else if (trade.netPnlCNS < BigInt(0)) {
+      losses += 1;
+      grossLossCNS += -trade.netPnlCNS;
+
+      currentLosingStreak += 1;
+      currentWinningStreak = 0;
+
+      longestLosingStreak = Math.max(
+        longestLosingStreak,
+        currentLosingStreak,
+      );
+    } else {
+      breakeven += 1;
+      currentWinningStreak = 0;
+      currentLosingStreak = 0;
+    }
+  }
+
+  const decisiveTrades = wins + losses;
+
+  return {
+    totalTrades: ordered.length,
+    wins,
+    losses,
+    breakeven,
+    winRate:
+      decisiveTrades === 0
+        ? null
+        : wins / decisiveTrades,
+    totalNetPnlCNS,
+    grossProfitCNS,
+    grossLossCNS,
+    profitFactor:
+      grossLossCNS === BigInt(0)
+        ? grossProfitCNS > BigInt(0)
+          ? Number.POSITIVE_INFINITY
+          : null
+        : Number(grossProfitCNS) / Number(grossLossCNS),
+    bestTradeCNS,
+    worstTradeCNS,
+    averageHoldingTimeSeconds:
+      ordered.length === 0
+        ? null
+        : Number(totalHoldingSeconds) / ordered.length,
+    longestWinningStreak,
+    longestLosingStreak,
+  };
+}
+
+export type RealizedDrawdown = {
+  maxDrawdownCNS: bigint;
+  peakEquityCNS: bigint;
+  troughEquityCNS: bigint;
+};
+
+export function calculateRealizedMaxDrawdown(
+  trades: readonly CompletedTrade[],
+): RealizedDrawdown {
+  const ordered = [...trades].sort((a, b) => {
+    if (a.closedAt === b.closedAt) return 0;
+    return a.closedAt < b.closedAt ? -1 : 1;
+  });
+
+  let equity = BigInt(0);
+  let peak = BigInt(0);
+
+  let maxDrawdownCNS = BigInt(0);
+  let maxDrawdownPeak = BigInt(0);
+  let maxDrawdownTrough = BigInt(0);
+
+  for (const trade of ordered) {
+    equity += trade.netPnlCNS;
+
+    if (equity > peak) {
+      peak = equity;
+    }
+
+    const drawdown = peak - equity;
+
+    if (drawdown > maxDrawdownCNS) {
+      maxDrawdownCNS = drawdown;
+      maxDrawdownPeak = peak;
+      maxDrawdownTrough = equity;
+    }
+  }
+
+  return {
+    maxDrawdownCNS,
+    peakEquityCNS: maxDrawdownPeak,
+    troughEquityCNS: maxDrawdownTrough,
+  };
+}
