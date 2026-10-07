@@ -74,11 +74,6 @@ function shortAddress(address: string | null) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function pnlTone(value: number | null) {
-  if (value === null || value === 0) return "neutral" as const;
-  return value > 0 ? "positive" as const : "negative" as const;
-}
-
 export default function TraderIntelligence() {
   const [input, setInput] = useState(DEFAULT_WALLET);
   const [wallet, setWallet] = useState(DEFAULT_WALLET);
@@ -123,13 +118,18 @@ export default function TraderIntelligence() {
   }, []);
 
   useEffect(() => {
-    loadWallet(wallet);
+    const initialLoad = setTimeout(() => {
+      void loadWallet(wallet);
+    }, 0);
 
     const interval = setInterval(() => {
-      loadWallet(wallet);
+      void loadWallet(wallet);
     }, 15_000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialLoad);
+      clearInterval(interval);
+    };
   }, [loadWallet, wallet]);
 
   function analyze(event: FormEvent<HTMLFormElement>) {

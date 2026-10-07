@@ -67,15 +67,6 @@ function formatUSD(value: number) {
   }).format(value);
 }
 
-function formatNumber(value: number) {
-  if (!Number.isFinite(value)) return "—";
-
-  return new Intl.NumberFormat("en-US", {
-    notation: value >= 1_000_000 ? "compact" : "standard",
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
 function getPrice(market: Market) {
   return market.state.mrk / 10 ** market.config.price_decimals;
 }
@@ -148,11 +139,18 @@ export default function Home() {
   }
 
   useEffect(() => {
-    loadMarkets();
+    const initialLoad = setTimeout(() => {
+      void loadMarkets();
+    }, 0);
 
-    const interval = setInterval(loadMarkets, 30_000);
+    const interval = setInterval(() => {
+      void loadMarkets();
+    }, 30_000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialLoad);
+      clearInterval(interval);
+    };
   }, []);
 
   const totals = useMemo(() => {
