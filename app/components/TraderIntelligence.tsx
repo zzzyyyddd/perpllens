@@ -2,6 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
+import HistoricalTraderAnalytics from "./HistoricalTraderAnalytics";
+
 const DEFAULT_WALLET =
   "0x65760dfA797B2d75A3f6E006CB0807f93E2D0dc3";
 
@@ -382,6 +384,10 @@ export default function TraderIntelligence() {
               </div>
             )}
           </div>
+
+          <HistoricalTraderAnalytics
+            accountId={account?.accountId ?? null}
+          />
 
           <div className="flex flex-col gap-3 border-t border-white/10 px-6 py-4 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
             <span>
