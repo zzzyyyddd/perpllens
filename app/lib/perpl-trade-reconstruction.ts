@@ -101,6 +101,7 @@ export type RealizedSegment = {
   fundingCNS: bigint;
   realizedAt: bigint;
   transactionHash: string;
+  logIndex: number;
 };
 
 export function compareLifecycleEvents(
@@ -132,12 +133,16 @@ export function extractRealizedSegments(
       return [{
         accountId: event.accountId,
         perpId: event.perpId,
-        side: event.positionType,
+        side:
+          event.kind === "invert"
+            ? (event.positionType === 0 ? 1 : 0)
+            : event.positionType,
         reason: event.kind,
         grossPnlCNS: event.deltaPnlCNS,
         fundingCNS: event.fundingCNS,
         realizedAt: event.timestamp,
         transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
       }];
     });
 }
@@ -262,6 +267,7 @@ export function reconstructPositionLifecycles(
         fundingCNS: event.fundingCNS,
         realizedAt: event.timestamp,
         transactionHash: event.transactionHash,
+        logIndex: event.logIndex,
       });
       continue;
     }
@@ -269,12 +275,16 @@ export function reconstructPositionLifecycles(
     lifecycle.realizedSegments.push({
       accountId: event.accountId,
       perpId: event.perpId,
-      side: event.positionType,
+      side:
+        event.kind === "invert"
+          ? lifecycle.side
+          : event.positionType,
       reason: event.kind,
       grossPnlCNS: event.deltaPnlCNS,
       fundingCNS: event.fundingCNS,
       realizedAt: event.timestamp,
       transactionHash: event.transactionHash,
+      logIndex: event.logIndex,
     });
 
     if (event.kind === "invert") {
