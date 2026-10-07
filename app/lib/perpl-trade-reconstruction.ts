@@ -432,3 +432,149 @@ export function calculateNetRealizedPnlCNS(args: {
 }): bigint {
   return args.grossPnlCNS + args.fundingCNS - args.takerFeesCNS;
 }
+
+export type CompletedTrade = {
+  accountId: bigint;
+  perpId: bigint;
+  side: PositionSide;
+  openedAt: bigint;
+  closedAt: bigint;
+  holdingTimeSeconds: bigint;
+  grossPnlCNS: bigint;
+  fundingCNS: bigint;
+  takerFeesCNS: bigint;
+  netPnlCNS: bigint;
+  outcome: "win" | "loss" | "breakeven";
+  finalReason: "close" | "invert" | "liquidation";
+};
+
+function eventIdentity(event: LifecycleEvent): string {
+  return [
+    event.transactionHash.toLowerCase(),
+    event.logIndex.toString(),
+  ].join(":");
+}
+
+export function buildCompletedTrades(args: {
+  lifecycles: readonly PositionLifecycle[];
+  lifecycleEvents: readonly LifecycleEvent[];
+  attributedFills: readonly AttributedTakerFill[];
+}): CompletedTrade[] {
+  const eventByIdentity = new Map<string, LifecycleEvent>();
+
+  for (const event of args.lifecycleEvents) {
+    eventByIdentity.set(eventIdentity(event), event);
+  }
+
+  const feeByEvent = new Map<string, bigint>();
+
+  for (const attributed of args.attributedFills) {
+    const key = eventIdentity(attributed.lifecycleEvent);
+    feeByEvent.set(
+      key,
+      (feeByEvent.get(key) ?? BigInt(0)) + attributed.totalFeeCNS,
+    );
+  }
+
+  const completed: CompletedTrade[] = [];
+
+  for (const lifecycle of args.lifecycles) {
+    const hold = holdingTimeSeconds(lifecycle);
+
+    if (
+      !isCompleteLifecycle(lifecycle) ||
+      lifecycle.openedAt === null ||
+      lifecycle.closedAt === null ||
+      lifecycle.openingTransactionHash === null ||
+      lifecycle.finalReason === null ||
+      hold === null
+    ) {
+      continue;
+    }
+
+    const openedAt = lifecycle.openedAt;
+    const closedAt = lifecycle.closedAt;
+
+    const relevantEvents = args.lifecycleEvents.filter((event) => {
+      if (
+        event.accountId !== lifecycle.accountId ||
+        event.perpId !== lifecycle.perpId
+      ) {
+        return false;
+      }
+
+      if (
+        event.timestamp < openedAt ||
+        event.timestamp > closedAt
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // A complete lifecycle must have a deterministically attributed taker
+    // fill for every trade-mutating lifecycle event. Otherwise fail closed.
+    const feeBearingEvents = relevantEvents.filter(
+      (event) =>
+        event.kind === "open" ||
+        event.kind === "increase" ||
+        event.kind === "decrease" ||
+        event.kind === "close" ||
+        event.kind === "invert",
+    );
+
+    if (
+      feeBearingEvents.some(
+        (event) => !feeByEvent.has(eventIdentity(event)),
+      )
+    ) {
+      continue;
+    }
+
+    const takerFeesCNS = feeBearingEvents.reduce(
+      (total, event) =>
+        total + (feeByEvent.get(eventIdentity(event)) ?? BigInt(0)),
+      BigInt(0),
+    );
+
+    const grossPnlCNS = sumGrossRealizedPnlCNS(
+      lifecycle.realizedSegments,
+    );
+
+    const fundingCNS = sumFundingCNS(
+      lifecycle.realizedSegments,
+    );
+
+    const netPnlCNS = calculateNetRealizedPnlCNS({
+      grossPnlCNS,
+      fundingCNS,
+      takerFeesCNS,
+    });
+
+    completed.push({
+      accountId: lifecycle.accountId,
+      perpId: lifecycle.perpId,
+      side: lifecycle.side,
+      openedAt: lifecycle.openedAt,
+      closedAt: lifecycle.closedAt,
+      holdingTimeSeconds: hold,
+      grossPnlCNS,
+      fundingCNS,
+      takerFeesCNS,
+      netPnlCNS,
+      outcome:
+        netPnlCNS > BigInt(0)
+          ? "win"
+          : netPnlCNS < BigInt(0)
+            ? "loss"
+            : "breakeven",
+      finalReason: lifecycle.finalReason,
+    });
+  }
+
+  return completed.sort((a, b) => {
+    if (a.closedAt === b.closedAt) return 0;
+    return a.closedAt < b.closedAt ? -1 : 1;
+  });
+}
