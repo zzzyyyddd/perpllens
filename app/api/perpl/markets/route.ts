@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { fetchPerplContext } from "@/app/lib/perpl-public";
 
 const PERPL_API = "https://app.perpl.xyz/api";
 
@@ -8,7 +9,9 @@ async function fetchJsonWithRetry(url: string) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const response = await fetch(url, {
-        cache: "no-store",
+        next: {
+          revalidate: 60,
+        },
         signal: AbortSignal.timeout(7000),
       });
 
@@ -58,9 +61,7 @@ function calculateVolatility(
 
 export async function GET() {
   try {
-    const context = await fetchJsonWithRetry(
-      `${PERPL_API}/v1/pub/context`
-    );
+    const context = await fetchPerplContext();
 
     const now = Date.now();
     const from = now - 24 * 60 * 60 * 1000;

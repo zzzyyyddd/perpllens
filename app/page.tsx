@@ -150,7 +150,7 @@ export default function Home() {
   useEffect(() => {
     loadMarkets();
 
-    const interval = setInterval(loadMarkets, 10_000);
+    const interval = setInterval(loadMarkets, 30_000);
 
     return () => clearInterval(interval);
   }, []);
