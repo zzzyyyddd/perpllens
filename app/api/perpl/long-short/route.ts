@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 type PositionOpenEvent = {
   id: string;
@@ -16,14 +18,16 @@ type GraphQLResult = {
   errors?: { message: string }[];
 };
 
-const LIMIT = 1000;
+const PAGE_SIZE = 500;
+const MAX_PAGES = 40;
 
 const QUERY = `
-  query RecentPositionOpens($since: numeric!, $limit: Int!) {
+  query RecentPositionOpens($since: numeric!, $until: numeric!, $limit: Int!, $offset: Int!) {
     PositionOpen(
-      where: { timestamp: { _gte: $since } }
-      order_by: [{ timestamp: desc }, { logIndex: desc }]
+      where: { timestamp: { _gte: $since, _lt: $until } }
+      order_by: [{ timestamp: desc }, { logIndex: desc }, { id: desc }]
       limit: $limit
+      offset: $offset
     ) {
       id
       perpId
@@ -33,59 +37,74 @@ const QUERY = `
   }
 `;
 
-export async function GET() {
+async function loadActivity() {
   const endpoint = process.env.ENVIO_GRAPHQL_URL?.trim();
 
   if (!endpoint || endpoint === "[SENSITIVE]") {
-    return NextResponse.json(
-      { status: "unavailable", error: "Historical index unavailable" },
-      { status: 503 },
-    );
+    throw new Error("Historical index unavailable");
   }
 
-  const since = Math.floor(Date.now() / 1000) - 86400;
+  const until = Math.floor(Date.now() / 1000);
+  const since = until - 86400;
 
   try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        query: QUERY,
-        variables: {
-          since: String(since),
-          limit: LIMIT,
-        },
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(12000),
-    });
+    const allEvents: PositionOpenEvent[] = [];
+    let completed = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 45000);
 
-    if (!response.ok) {
-      throw new Error(`Envio HTTP ${response.status}`);
+    try {
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          query: QUERY,
+          variables: {
+            since: String(since),
+            until: String(until),
+            limit: PAGE_SIZE,
+            offset: page * PAGE_SIZE,
+          },
+        }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Envio HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as GraphQLResult;
+
+      if (payload.errors?.length || !payload.data) {
+        throw new Error("Envio GraphQL query failed");
+      }
+
+      const events = payload.data.PositionOpen;
+
+      if (!Array.isArray(events) || events.length > PAGE_SIZE) {
+        throw new Error("Invalid position activity response");
+      }
+
+      allEvents.push(...events);
+
+      if (events.length < PAGE_SIZE) {
+        completed = true;
+        break;
+      }
     }
 
-    const payload = (await response.json()) as GraphQLResult;
-
-    if (payload.errors?.length || !payload.data) {
-      throw new Error("Envio GraphQL query failed");
+    } finally {
+      clearTimeout(timeout);
     }
 
-    const events = payload.data.PositionOpen;
-
-    if (!Array.isArray(events)) {
-      throw new Error("Invalid position activity response");
+    if (!completed) {
+      throw new Error("Position activity exceeds safe pagination limit");
     }
 
-    // Never report incomplete 24h results as complete.
-    if (events.length >= LIMIT) {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          error: "Position activity exceeds safe query limit",
-        },
-        { status: 503 },
-      );
-    }
+    const events = allEvents;
 
     const byMarket: Record<
       string,
@@ -125,7 +144,7 @@ export async function GET() {
       byMarket[marketId].total += 1;
     }
 
-    return NextResponse.json({
+    return {
       status: "ok",
       windowHours: 24,
       updatedAt: new Date().toISOString(),
@@ -133,10 +152,25 @@ export async function GET() {
       long: totalLong,
       short: totalShort,
       byMarket,
-    });
+    };
   } catch (error) {
     console.error("Long/short activity unavailable:", error);
 
+    throw error;
+  }
+}
+
+const cachedActivity = unstable_cache(
+  loadActivity,
+  ["perpl-long-short-activity-v1"],
+  { revalidate: 60 },
+);
+
+export async function GET() {
+  try {
+    const data = await cachedActivity();
+    return NextResponse.json(data);
+  } catch {
     return NextResponse.json(
       {
         status: "unavailable",
