@@ -16,7 +16,7 @@ type LiquidationResponse = {
   status: "ok";
   totalLiquidations: number;
   byMarket: Record<string, number>;
-  recent: LiquidationEvent[];
+  recentByMarket: Record<string, LiquidationEvent[]>;
   updatedAt: string;
 };
 
@@ -83,9 +83,8 @@ export default function LiquidationMonitor({
 
   const selectedCount = data?.byMarket[String(selectedMarketId)] ?? 0;
 
-  const recentForMarket = data?.recent.filter(
-    (event) => Number(event.perpId) === selectedMarketId,
-  ) ?? [];
+  const recentForMarket =
+    data?.recentByMarket[String(selectedMarketId)] ?? [];
 
   return (
     <section className="mt-8 rounded-2xl border border-white/10 bg-[#0d1014] p-5 sm:p-6">

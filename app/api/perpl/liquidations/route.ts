@@ -92,9 +92,20 @@ export async function GET() {
     }
 
     const byMarket: Record<string, number> = {};
+    const recentByMarket: Record<string, LiquidationEvent[]> = {};
 
     for (const event of events) {
-      byMarket[event.perpId] = (byMarket[event.perpId] ?? 0) + 1;
+      const marketId = event.perpId;
+
+      byMarket[marketId] = (byMarket[marketId] ?? 0) + 1;
+
+      if (!recentByMarket[marketId]) {
+        recentByMarket[marketId] = [];
+      }
+
+      if (recentByMarket[marketId].length < 10) {
+        recentByMarket[marketId].push(event);
+      }
     }
 
     return NextResponse.json({
@@ -103,7 +114,7 @@ export async function GET() {
       updatedAt: new Date().toISOString(),
       totalLiquidations: events.length,
       byMarket,
-      recent: events.slice(0, 10),
+      recentByMarket,
     });
   } catch (error) {
     console.error("Liquidation analytics unavailable:", error);
