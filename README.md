@@ -161,6 +161,35 @@ The indexer is configured from Perpl Exchange deployment block `54,773,010` and 
 - `PositionInverted`
 - `PositionLiquidated`
 
+
+### Envio Integration — End-to-End Data Flow
+
+PerplLens uses Envio HyperIndex to index nine Perpl Exchange events on Monad Mainnet (chain 143), starting from block 54,773,010.
+
+```text
+Perpl Exchange (Monad Mainnet)
+          |
+    9 onchain events
+          |
+    Envio HyperIndex
+          |
+  GraphQL event entities
+          |
+  /api/perpl/analytics
+          |
+Trade lifecycle reconstruction
+          |
+Historical Trader Analytics UI
+```
+
+The indexer configuration (`indexer/config.yaml`) defines the contract, start block, and subscribed events. The handlers (`indexer/src/handlers/perpl.ts`) store decoded events in nine entities defined by `indexer/schema.graphql`.
+
+Each indexed record preserves its transaction hash, block number, timestamp, and log index. Unique event IDs combine chain ID, transaction hash, and log index.
+
+The application queries Envio GraphQL and reconstructs position lifecycles, attributing fees and funding to calculate completed trades, realized PnL, win rate, profit factor, drawdown, and holding periods. Incomplete or ambiguous history is not replaced with invented data.
+
+The production dashboard uses a hosted Envio GraphQL deployment and remains accessible without the developer's laptop running.
+
 The historical UI fails closed when its configured GraphQL endpoint cannot be reached.
 
 ## API Routes
@@ -246,7 +275,7 @@ AI-assisted development tools, including ChatGPT, were used for implementation g
 
 ## Status
 
-PerplLens is an active hackathon prototype. Live market analytics and Monad wallet intelligence are publicly deployed. The historical analytics engine, API, and UI are implemented; production historical availability depends on a configured and reachable Envio GraphQL deployment.
+PerplLens is an active hackathon prototype deployed on Vercel. Live market analytics, Monad wallet intelligence, and Envio-powered historical trader analytics have been validated in production using real Monad Mainnet data. Historical analytics depends on the hosted Envio GraphQL service; if it becomes unavailable, historical metrics are hidden rather than replaced with fabricated values.
 
 ## License
 
