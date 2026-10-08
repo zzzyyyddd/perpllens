@@ -1,5 +1,6 @@
 "use client";
 
+import LiquidationMonitor from "./components/LiquidationMonitor";
 import { useEffect, useMemo, useState } from "react";
 import MarketChart from "./components/MarketChart";
 import RiskPanel from "./components/RiskPanel";
@@ -466,6 +467,11 @@ export default function Home() {
           </>
         )}
       </div>
+
+      <LiquidationMonitor
+        selectedMarketId={selectedMarketId}
+        markets={data?.markets ?? []}
+      />
 
       <footer className="mt-8 flex flex-col gap-2 border-t border-white/10 pt-5 text-xs text-zinc-600 sm:flex-row sm:items-center sm:justify-between">
           <span>PerplLens · Perpl intelligence on Monad Mainnet</span>
