@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unstable_cache } from "next/cache";
-
-import {
-  HistoricalDataUnavailableError,
-  fetchHistoricalRows,
-} from "@/app/lib/perpl-historical-client";
-import { buildHistoricalTraderAnalytics } from "@/app/lib/perpl-historical-analytics";
+import { buildHistoricalAnalyticsFromDb } from "@/app/lib/perpl-historical-db-analytics";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const cachedHistoricalRows = unstable_cache(
-  async (accountId: string) => fetchHistoricalRows(accountId),
-  ["perpl-historical-rows-v1"],
-  { revalidate: 30 },
-);
 
 function bigintString(value: bigint): string {
   return value.toString();
@@ -35,19 +23,28 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = await cachedHistoricalRows(accountId);
-    const result = buildHistoricalTraderAnalytics(rows);
+    const historical = await buildHistoricalAnalyticsFromDb(accountId);
+
+    if (historical.status === "syncing") {
+      return NextResponse.json(
+        {
+          status: "syncing",
+          accountId,
+          completedCategories: historical.completedCategories,
+          totalCategories: 6,
+          totalHashes: historical.totalHashes,
+          checkedHashes: historical.checkedHashes,
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
+    const result = historical.analytics;
 
     return NextResponse.json({
       status: "ok",
       accountId,
-      indexedLifecycleEvents:
-        rows.positionOpens.length +
-        rows.positionIncreases.length +
-        rows.positionDecreases.length +
-        rows.positionCloses.length +
-        rows.positionInverts.length +
-        rows.positionLiquidations.length,
+      indexedLifecycleEvents: historical.indexedLifecycleEvents,
       analytics: {
         totalTrades: result.analytics.totalTrades,
         wins: result.analytics.wins,
@@ -100,17 +97,6 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    if (error instanceof HistoricalDataUnavailableError) {
-      return NextResponse.json(
-        {
-          status: "unavailable",
-          accountId,
-          error: error.message,
-        },
-        { status: 503 },
-      );
-    }
-
     console.error("Historical analytics failed", error);
 
     return NextResponse.json(

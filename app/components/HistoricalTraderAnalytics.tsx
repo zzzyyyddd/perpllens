@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type HistoricalTrade = {
   accountId: string;
@@ -41,6 +41,15 @@ type AnalyticsResponse = {
   indexedLifecycleEvents: number;
   analytics: HistoricalAnalytics;
   trades: HistoricalTrade[];
+};
+
+type SyncingResponse = {
+  status: "syncing";
+  accountId: string;
+  completedCategories: number;
+  totalCategories: number;
+  totalHashes: number;
+  checkedHashes: number;
 };
 
 type ErrorResponse = {
@@ -131,70 +140,163 @@ export default function HistoricalTraderAnalytics({
   accountId: number | null;
 }) {
   const [data, setData] = useState<AnalyticsResponse | null>(null);
+  const [syncing, setSyncing] = useState<SyncingResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async (nextAccountId: number) => {
-    setLoading(true);
+  const accountRef = useRef(accountId);
 
-    try {
-      const response = await fetch(
-        `/api/perpl/analytics?accountId=${encodeURIComponent(
-          String(nextAccountId),
-        )}`,
-        { cache: "no-store" },
-      );
-
-      const result = (await response.json()) as
-        | AnalyticsResponse
-        | ErrorResponse;
-
-      if (response.status === 503 || result.status === "unavailable") {
-        setData(null);
-        setUnavailable(true);
-        setError("");
-        return;
-      }
-
-      if (
-        !response.ok ||
-        result.status !== "ok" ||
-        !("analytics" in result)
-      ) {
-        throw new Error(
-          "error" in result && result.error
-            ? result.error
-            : `HTTP ${response.status}`,
-        );
-      }
-
-      setData(result);
-      setUnavailable(false);
-      setError("");
-    } catch (err) {
-      console.error("Failed to load historical trader analytics:", err);
-      setData(null);
-      setUnavailable(false);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Historical analytics could not be loaded.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Update synchronously so responses from an old account are ignored.
+  accountRef.current = accountId;
 
   useEffect(() => {
-    if (accountId === null) return;
+    if (accountId === null) {
+      return;
+    }
 
-    const initialLoad = setTimeout(() => {
-      void load(accountId);
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+
+    const isCurrent = () =>
+      !cancelled && accountRef.current === accountId;
+
+    async function runCycle(initial: boolean) {
+      if (!isCurrent()) return;
+
+      if (initial) {
+        setLoading(true);
+        setData(null);
+        setSyncing(null);
+        setUnavailable(false);
+        setError("");
+      }
+
+      let shouldRetry = false;
+
+      try {
+        const response = await fetch(
+          `/api/perpl/analytics?accountId=${encodeURIComponent(
+            String(accountId),
+          )}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        const result = (await response.json()) as
+          | AnalyticsResponse
+          | SyncingResponse
+          | ErrorResponse;
+
+        if (!isCurrent()) return;
+
+        if (response.ok && result.status === "syncing") {
+          setData(null);
+          setSyncing(result as SyncingResponse);
+          setUnavailable(false);
+          setError("");
+          shouldRetry = true;
+
+          // One batch per cycle. Server enforces throttle and lease.
+          const syncResponse = await fetch(
+            "/api/perpl/sync-request",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                accountId: String(accountId),
+              }),
+              cache: "no-store",
+              signal: AbortSignal.any([
+                controller.signal,
+                AbortSignal.timeout(45000),
+              ]),
+            },
+          );
+
+          if (!isCurrent()) return;
+
+          if (
+            !syncResponse.ok &&
+            syncResponse.status !== 429
+          ) {
+            throw new Error(
+              `Historical sync failed: HTTP ${syncResponse.status}`,
+            );
+          }
+
+          return;
+        }
+
+        if (
+          response.status === 503 ||
+          result.status === "unavailable"
+        ) {
+          setData(null);
+          setSyncing(null);
+          setUnavailable(true);
+          setError("");
+          return;
+        }
+
+        if (
+          !response.ok ||
+          result.status !== "ok" ||
+          !("analytics" in result)
+        ) {
+          throw new Error(
+            "error" in result && result.error
+              ? result.error
+              : `HTTP ${response.status}`,
+          );
+        }
+
+        setData(result);
+        setSyncing(null);
+        setUnavailable(false);
+        setError("");
+      } catch (err) {
+        if (!isCurrent()) return;
+
+        console.error(
+          "Historical analytics synchronization failed:",
+          err,
+        );
+
+        setError(
+          "Synchronization temporarily interrupted. Retrying..."
+        );
+
+        // Retry temporary errors without overlapping requests.
+        shouldRetry = true;
+      } finally {
+        if (isCurrent()) {
+          setLoading(false);
+
+          if (shouldRetry) {
+            timer = setTimeout(() => {
+              void runCycle(false);
+            }, 5000);
+          }
+        }
+      }
+    }
+
+    timer = setTimeout(() => {
+      void runCycle(true);
     }, 0);
 
-    return () => clearTimeout(initialLoad);
-  }, [accountId, load]);
+    return () => {
+      cancelled = true;
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }, [accountId]);
 
   if (accountId === null) return null;
 
@@ -229,7 +331,23 @@ export default function HistoricalTraderAnalytics({
         </span>
       </div>
 
-      {loading ? (
+      {syncing ? (
+        <div className="border-t border-white/10 px-6 py-8">
+          <p className="text-sm font-medium text-cyan-300">
+            Historical data synchronization
+          </p>
+          <p className="mt-2 text-xs text-zinc-500">
+            {syncing.completedCategories} of {syncing.totalCategories}
+            {" "}event categories complete.
+            {" "}{syncing.checkedHashes} of {syncing.totalHashes}
+            {" "}transaction hashes checked.
+          </p>
+          <p className="mt-2 text-xs text-zinc-600">
+            Performance metrics remain hidden until synchronization
+            is complete.
+          </p>
+        </div>
+      ) : loading ? (
         <div className="border-t border-white/10 px-6 py-10 text-center text-sm text-zinc-600">
           Reconstructing indexed Perpl history...
         </div>
