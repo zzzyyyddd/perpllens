@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 
 import {
   HistoricalDataUnavailableError,
@@ -7,6 +8,12 @@ import {
 import { buildHistoricalTraderAnalytics } from "@/app/lib/perpl-historical-analytics";
 
 export const dynamic = "force-dynamic";
+
+const cachedHistoricalRows = unstable_cache(
+  async (accountId: string) => fetchHistoricalRows(accountId),
+  ["perpl-historical-rows-v1"],
+  { revalidate: 30 },
+);
 
 function bigintString(value: bigint): string {
   return value.toString();
@@ -27,7 +34,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const rows = await fetchHistoricalRows(accountId);
+    const rows = await cachedHistoricalRows(accountId);
     const result = buildHistoricalTraderAnalytics(rows);
 
     return NextResponse.json({

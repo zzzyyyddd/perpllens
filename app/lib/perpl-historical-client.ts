@@ -256,24 +256,33 @@ function lifecycleTransactionHashes(rows: LifecyclePage): string[] {
 async function fetchTakerOrderFills(
   transactionHashes: string[],
 ): Promise<HistoricalRows["takerOrderFills"]> {
-  const fills: HistoricalRows["takerOrderFills"] = [];
+  const batches: string[][] = [];
 
   for (
     let start = 0;
     start < transactionHashes.length;
     start += TX_BATCH_SIZE
   ) {
-    const txHashes = transactionHashes.slice(
-      start,
-      start + TX_BATCH_SIZE,
+    batches.push(
+      transactionHashes.slice(start, start + TX_BATCH_SIZE),
+    );
+  }
+
+  const fills: HistoricalRows["takerOrderFills"] = [];
+  const CONCURRENCY = 3;
+
+  for (let start = 0; start < batches.length; start += CONCURRENCY) {
+    const group = batches.slice(start, start + CONCURRENCY);
+
+    const results = await Promise.all(
+      group.map((txHashes) =>
+        graphql<TakerFillPage>(TAKER_FILLS_QUERY, { txHashes }),
+      ),
     );
 
-    const page = await graphql<TakerFillPage>(
-      TAKER_FILLS_QUERY,
-      { txHashes },
-    );
-
-    fills.push(...page.takerOrderFills);
+    for (const result of results) {
+      fills.push(...result.takerOrderFills);
+    }
   }
 
   return fills;
