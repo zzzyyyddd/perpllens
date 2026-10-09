@@ -8,6 +8,7 @@ import {
 import { buildHistoricalTraderAnalytics } from "@/app/lib/perpl-historical-analytics";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 const cachedHistoricalRows = unstable_cache(
   async (accountId: string) => fetchHistoricalRows(accountId),

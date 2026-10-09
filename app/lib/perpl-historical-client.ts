@@ -3,6 +3,8 @@ import "server-only";
 import type { HistoricalRows } from "./perpl-historical-analytics";
 
 const PAGE_SIZE = 500;
+const MAX_LIFECYCLE_PAGES = 20;
+const HISTORICAL_TIMEOUT_MS = 40000;
 
 type GraphQLError = {
   message?: string;
@@ -35,6 +37,7 @@ function endpoint(): string {
 async function graphql<T>(
   query: string,
   variables: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<T> {
   let response: Response;
 
@@ -46,8 +49,15 @@ async function graphql<T>(
       },
       body: JSON.stringify({ query, variables }),
       cache: "no-store",
+      signal,
     });
   } catch {
+    if (signal?.aborted) {
+      throw new HistoricalDataUnavailableError(
+        "Historical reconstruction exceeded the 40-second safety limit",
+      );
+    }
+
     throw new HistoricalDataUnavailableError(
       "Historical indexer is unreachable",
     );
@@ -59,7 +69,21 @@ async function graphql<T>(
     );
   }
 
-  const payload = (await response.json()) as GraphQLResponse<T>;
+  let payload: GraphQLResponse<T>;
+
+  try {
+    payload = (await response.json()) as GraphQLResponse<T>;
+  } catch {
+    if (signal?.aborted) {
+      throw new HistoricalDataUnavailableError(
+        "Historical reconstruction exceeded the 40-second safety limit",
+      );
+    }
+
+    throw new HistoricalDataUnavailableError(
+      "Historical indexer returned an invalid response",
+    );
+  }
 
   if (payload.errors?.length) {
     throw new HistoricalDataUnavailableError(
@@ -181,6 +205,7 @@ function pageIsFull(page: LifecyclePage): boolean {
 
 export async function fetchHistoricalLifecycleRows(
   accountId: string,
+  signal?: AbortSignal,
 ): Promise<LifecyclePage> {
   if (!/^\d+$/.test(accountId)) {
     throw new Error("Invalid Perpl account ID");
@@ -188,21 +213,27 @@ export async function fetchHistoricalLifecycleRows(
 
   const rows = emptyLifecycle();
 
-  for (let offset = 0; ; offset += PAGE_SIZE) {
+  for (
+    let offset = 0;
+    offset < MAX_LIFECYCLE_PAGES * PAGE_SIZE;
+    offset += PAGE_SIZE
+  ) {
     const page = await graphql<LifecyclePage>(LIFECYCLE_QUERY, {
       accountId,
       limit: PAGE_SIZE,
       offset,
-    });
+    }, signal);
 
     appendLifecycle(rows, page);
 
     if (!pageIsFull(page)) {
-      break;
+      return rows;
     }
   }
 
-  return rows;
+  throw new HistoricalDataUnavailableError(
+    "Historical activity exceeds the safe pagination limit",
+  );
 }
 
 const TX_BATCH_SIZE = 100;
@@ -255,6 +286,7 @@ function lifecycleTransactionHashes(rows: LifecyclePage): string[] {
 
 async function fetchTakerOrderFills(
   transactionHashes: string[],
+  signal?: AbortSignal,
 ): Promise<HistoricalRows["takerOrderFills"]> {
   const batches: string[][] = [];
 
@@ -276,7 +308,7 @@ async function fetchTakerOrderFills(
 
     const results = await Promise.all(
       group.map((txHashes) =>
-        graphql<TakerFillPage>(TAKER_FILLS_QUERY, { txHashes }),
+        graphql<TakerFillPage>(TAKER_FILLS_QUERY, { txHashes }, signal),
       ),
     );
 
@@ -291,7 +323,8 @@ async function fetchTakerOrderFills(
 export async function fetchHistoricalRows(
   accountId: string,
 ): Promise<HistoricalRows> {
-  const lifecycle = await fetchHistoricalLifecycleRows(accountId);
+  const signal = AbortSignal.timeout(HISTORICAL_TIMEOUT_MS);
+  const lifecycle = await fetchHistoricalLifecycleRows(accountId, signal);
 
   const transactionHashes =
     lifecycleTransactionHashes(lifecycle);
@@ -299,7 +332,7 @@ export async function fetchHistoricalRows(
   const takerOrderFills =
     transactionHashes.length === 0
       ? []
-      : await fetchTakerOrderFills(transactionHashes);
+      : await fetchTakerOrderFills(transactionHashes, signal);
 
   return {
     ...lifecycle,
