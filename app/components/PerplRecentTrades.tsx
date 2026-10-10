@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import TraderPerformance from "./TraderPerformance";
 
 type Trade = {
   perpId: string;
+  closedAt: string;
   netPnlCNS: string;
   takerFeesCNS: string;
   holdingTimeSeconds: string;
@@ -14,6 +16,14 @@ type Result = {
   status: string;
   scope?: string;
   candidateCount?: number;
+  analytics?: {
+    totalTrades: number;
+    wins: number;
+    losses: number;
+    winRate: number | null;
+    profitFactor: number | null;
+    totalNetPnlCNS: string;
+  };
   trades?: Trade[];
 };
 
@@ -133,6 +143,12 @@ export default function PerplRecentTrades({
 
       {state === "success" && data && (
         <div className="mt-4 space-y-3">
+          {data.analytics && data.trades && (
+            <TraderPerformance
+              analytics={data.analytics}
+              trades={data.trades}
+            />
+          )}
           <p className="text-xs text-zinc-500">
             {data.trades?.length ?? 0} verified trades from{" "}
             {data.candidateCount ?? 0} recent candidates.
