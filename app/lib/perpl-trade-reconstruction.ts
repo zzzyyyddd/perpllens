@@ -398,6 +398,7 @@ export function attributeTakerFills(
   }
 
   const attributed: AttributedTakerFill[] = [];
+  const used = new Set<TakerFill>();
 
   for (const event of lifecycleEvents) {
     const candidates =
@@ -410,11 +411,10 @@ export function attributeTakerFills(
     );
 
     // Fail closed: never guess if ordering is missing or ambiguous.
-    if (exact.length !== 1) {
-      continue;
-    }
-
-    const fill = exact[0];
+    const txEvents = lifecycleEvents.filter(e => sameTransaction(e.transactionHash, event.transactionHash));
+    const fill = exact.length === 1 ? exact[0] : txEvents.length === 1 && candidates.length === 1 ? candidates[0] : undefined;
+    if (!fill || used.has(fill)) continue;
+    used.add(fill);
 
     attributed.push({
       lifecycleEvent: event,
@@ -456,6 +456,9 @@ export type CompletedTrade = {
   netPnlCNS: bigint;
   outcome: "win" | "loss" | "breakeven";
   finalReason: "close" | "invert" | "liquidation";
+  openingTransactionHash: string;
+  closingTransactionHash: string;
+
 };
 
 function eventIdentity(event: LifecycleEvent): string {
@@ -496,6 +499,7 @@ export function buildCompletedTrades(args: {
       lifecycle.openedAt === null ||
       lifecycle.closedAt === null ||
       lifecycle.openingTransactionHash === null ||
+      lifecycle.closingTransactionHash === null ||
       lifecycle.finalReason === null ||
       hold === null
     ) {
@@ -627,6 +631,8 @@ export function buildCompletedTrades(args: {
             ? "loss"
             : "breakeven",
       finalReason: lifecycle.finalReason,
+      openingTransactionHash: lifecycle.openingTransactionHash,
+      closingTransactionHash: lifecycle.closingTransactionHash,
     });
   }
 

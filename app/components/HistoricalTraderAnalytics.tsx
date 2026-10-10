@@ -1,8 +1,14 @@
 "use client";
+import PerplRecentTrades from "./PerplRecentTrades";
+import TraderRiskPassport from "./TraderRiskPassport";
+import PerplRecentActivity from "./PerplRecentActivity";
 
 import { useEffect, useRef, useState } from "react";
 
 type HistoricalTrade = {
+  openingTransactionHash: string;
+  closingTransactionHash: string;
+
   accountId: string;
   perpId: string;
   side: 0 | 1;
@@ -281,7 +287,7 @@ export default function HistoricalTraderAnalytics({
           if (shouldRetry) {
             timer = setTimeout(() => {
               void runCycle(false);
-            }, 5000);
+            }, 10000);
           }
         }
       }
@@ -304,6 +310,12 @@ export default function HistoricalTraderAnalytics({
 
   return (
     <div className="border-t border-white/10">
+      {!data && syncing && (
+        <>
+          <PerplRecentTrades accountId={String(accountId)} />
+          <PerplRecentActivity accountId={String(accountId)} />
+        </>
+      )}
       <div className="flex flex-col gap-2 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -375,6 +387,12 @@ export default function HistoricalTraderAnalytics({
         </div>
       ) : analytics && data ? (
         <>
+          <TraderRiskPassport
+            totalTrades={analytics.totalTrades}
+            winRate={analytics.winRate}
+            profitFactor={analytics.profitFactor}
+            maxDrawdown={moneyFromCNS(analytics.maxRealizedDrawdownCNS)}
+          />
           <div className="grid gap-px border-y border-white/10 bg-white/10 sm:grid-cols-2 xl:grid-cols-4">
             <HistoricalMetric
               label="Net Realized PnL"
@@ -387,25 +405,6 @@ export default function HistoricalTraderAnalytics({
                     ? "negative"
                     : "neutral"
               }
-            />
-
-            <HistoricalMetric
-              label="Win Rate"
-              value={percent(analytics.winRate)}
-              sub={`${analytics.wins}W · ${analytics.losses}L · ${analytics.breakeven} BE`}
-            />
-
-            <HistoricalMetric
-              label="Profit Factor"
-              value={ratio(analytics.profitFactor)}
-              sub="Gross profit ÷ gross loss"
-            />
-
-            <HistoricalMetric
-              label="Max Realized Drawdown"
-              value={moneyFromCNS(analytics.maxRealizedDrawdownCNS)}
-              sub="Realized trade equity curve"
-              tone="negative"
             />
 
             <HistoricalMetric
@@ -464,6 +463,7 @@ export default function HistoricalTraderAnalytics({
                       <th className="px-4 py-3 font-medium">Fees</th>
                       <th className="px-4 py-3 font-medium">Net PnL</th>
                       <th className="px-6 py-3 font-medium">Exit</th>
+                      <th className="px-4 py-3 font-medium">Proof</th>
                     </tr>
                   </thead>
 
@@ -526,6 +526,36 @@ export default function HistoricalTraderAnalytics({
 
                         <td className="px-6 py-4 text-xs uppercase tracking-wider text-zinc-500">
                           {trade.finalReason}
+                        </td>
+                        <td className="px-4 py-4">
+                          <div className="flex gap-3 text-xs">
+                            {(
+                              [
+                                ["Open", trade.openingTransactionHash],
+                                ["Close", trade.closingTransactionHash],
+                              ] as const
+                            ).map(([label, hash]) =>
+                              /^0x[a-fA-F0-9]{64}$/.test(hash ?? "") ? (
+                                <a
+                                  key={label}
+                                  href={`https://monadvision.com/tx/${hash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-cyan-400 hover:underline"
+                                >
+                                  {label} ↗
+                                </a>
+                              ) : null,
+                            )}
+                            {!/^0x[a-fA-F0-9]{64}$/.test(
+                              trade.openingTransactionHash ?? "",
+                            ) &&
+                              !/^0x[a-fA-F0-9]{64}$/.test(
+                                trade.closingTransactionHash ?? "",
+                              ) && (
+                                <span className="text-zinc-600">—</span>
+                              )}
+                          </div>
                         </td>
                       </tr>
                     ))}
