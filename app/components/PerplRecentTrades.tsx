@@ -117,9 +117,26 @@ export default function PerplRecentTrades({
       </p>
 
       {state === "loading" && (
-        <p className="mt-4 text-sm text-zinc-400" role="status">
-          Verifying recent trades. This may take a few seconds...
-        </p>
+        <div
+          className="mt-4 flex items-start gap-3 rounded-xl border border-cyan-400/10 bg-cyan-400/[0.03] p-4"
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-300"
+            aria-hidden="true"
+          />
+          <div>
+            <p className="text-sm font-medium text-zinc-200">
+              Verifying onchain trade history...
+            </p>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">
+              Reconstructing completed positions and fees from
+              Envio-indexed Monad events. Initial verification may
+              take 10–30 seconds.
+            </p>
+          </div>
+        </div>
       )}
 
       {state === "unavailable" && (

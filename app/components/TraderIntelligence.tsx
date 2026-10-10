@@ -7,6 +7,9 @@ import HistoricalTraderAnalytics from "./HistoricalTraderAnalytics";
 const DEFAULT_WALLET =
   "0x65760dfA797B2d75A3f6E006CB0807f93E2D0dc3";
 
+const DEMO_WALLET =
+  "0xFfd3107aa7cc055AA5D9864Bc5CAe4c181f317fb";
+
 type ActivePosition = {
   perpetualId: number;
   name: string;
@@ -214,6 +217,31 @@ export default function TraderIntelligence() {
               {loading ? "Reading..." : "Analyze"}
             </button>
           </form>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setInput(DEMO_WALLET);
+              setError("");
+
+              if (wallet.toLowerCase() === DEMO_WALLET.toLowerCase()) {
+                setRefreshKey((current) => current + 1);
+              } else {
+                setWallet(DEMO_WALLET);
+              }
+            }}
+            disabled={loading}
+            className="rounded-lg border border-cyan-400/20 bg-cyan-400/[0.08] px-4 py-2 text-xs font-medium text-cyan-300 transition hover:bg-cyan-400/[0.14] disabled:cursor-wait disabled:opacity-50"
+          >
+            Try Demo Wallet
+          </button>
+
+          <p className="text-xs text-zinc-500">
+            Explore a real Perpl trader on Monad mainnet.
+            No wallet connection required.
+          </p>
         </div>
       </div>
 
