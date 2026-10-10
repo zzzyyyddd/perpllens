@@ -32,6 +32,27 @@ request. If the index is temporarily unavailable, use
 
 Built for **Monad Metropolis** — Onchain Finance & Trading.
 
+## Product Preview
+
+### Live Protocol Overview
+
+![PerplLens protocol overview](docs/images/perpllens-overview.png)
+
+### BTC Market Analytics
+
+![PerplLens BTC market analytics](docs/images/perpllens-market-analytics.png)
+
+### Market Risk & Liquidation Monitor
+
+![PerplLens risk intelligence](docs/images/perpllens-risk-monitor.png)
+
+### Verified Trader Performance
+
+![PerplLens verified trader performance](docs/images/perpllens-trader-performance.png)
+
+Performance metrics shown above represent a verified recent
+sample, not the trader's complete historical performance.
+
 ## Why PerplLens?
 
 Perpetual markets generate plenty of data, but useful risk signals are fragmented across market state, wallet positions, and historical executions.
