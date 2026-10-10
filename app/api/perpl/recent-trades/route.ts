@@ -35,12 +35,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    let candidates;
-    try {
-      candidates = await findRecentTradeCandidates(accountId);
-    } catch {
-      candidates = await findRecentTradeCandidates(accountId);
-    }
+    // Avoid repeating the same expensive query immediately on failure.
+    const candidates = await findRecentTradeCandidates(accountId);
     const verified = [];
 
     for (const candidate of candidates.slice(0, 1)) {

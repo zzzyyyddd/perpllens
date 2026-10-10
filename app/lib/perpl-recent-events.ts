@@ -81,19 +81,25 @@ export async function fetchRecentLifecycleRows(
         }
       `;
 
-      const response = await fetchPerplEnvio(
-        endpoint,
-        {
-          query,
-          variables: {
-            where: {
-              accountId: { _eq: accountId },
+      let response;
+
+      try {
+        response = await fetchPerplEnvio(
+          endpoint,
+          {
+            query,
+            variables: {
+              where: {
+                accountId: { _eq: accountId },
+              },
+              limit,
             },
-            limit,
           },
-        },
-        10000,
-      );
+          10000,
+        );
+      } catch (error) {
+        throw error;
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -115,6 +121,7 @@ export async function fetchRecentLifecycleRows(
       if (!Array.isArray(payload.data?.events)) {
         throw new Error(`${eventType}: invalid response`);
       }
+
 
       return {
         eventType,

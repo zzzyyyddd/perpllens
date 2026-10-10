@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import HistoricalTraderAnalytics from "./HistoricalTraderAnalytics";
 
@@ -83,66 +83,85 @@ export default function TraderIntelligence() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadWallet = useCallback(async (address: string) => {
-    setLoading(true);
-
-    try {
-      const response = await fetch(
-        `/api/perpl/wallet?address=${encodeURIComponent(address)}`,
-        { cache: "no-store" }
-      );
-
-      const result = (await response.json()) as WalletData | ApiError;
-
-      if (
-        !response.ok ||
-        result.status !== "ok" ||
-        !("account" in result)
-      ) {
-        throw new Error(
-          "message" in result ? result.message : `HTTP ${response.status}`
-        );
-      }
-
-      setData(result);
-      setError("");
-    } catch (err) {
-      console.error("Failed to load onchain trader intelligence:", err);
-      setData(null);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to read this Perpl account from Monad."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const requestId = useRef(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const initialLoad = setTimeout(() => {
-      void loadWallet(wallet);
-    }, 0);
+    const controller = new AbortController();
+    const currentRequest = ++requestId.current;
 
-    const interval = setInterval(() => {
-      void loadWallet(wallet);
-    }, 15_000);
+    async function loadWallet() {
+      setLoading(true);
+      setData(null);
+      setError("");
+
+      try {
+        const response = await fetch(
+          `/api/perpl/wallet?address=${encodeURIComponent(wallet)}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+
+        const result = (await response.json()) as WalletData | ApiError;
+
+        if (
+          !response.ok ||
+          result.status !== "ok" ||
+          !("account" in result)
+        ) {
+          throw new Error(
+            "message" in result
+              ? result.message
+              : `HTTP ${response.status}`,
+          );
+        }
+
+        if (requestId.current !== currentRequest) return;
+
+        setData(result);
+        setError("");
+      } catch (err) {
+        if (controller.signal.aborted || requestId.current !== currentRequest) {
+          return;
+        }
+
+        console.error("Wallet lookup failed:", err);
+        setData(null);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to read this Perpl account from Monad.",
+        );
+      } finally {
+        if (!controller.signal.aborted && requestId.current === currentRequest) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void loadWallet();
 
     return () => {
-      clearTimeout(initialLoad);
-      clearInterval(interval);
+      controller.abort();
     };
-  }, [loadWallet, wallet]);
+  }, [wallet, refreshKey]);
 
   function analyze(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     const next = input.trim();
 
-    if (!next) return;
+    if (!/^0x[a-fA-F0-9]{40}$/.test(next)) {
+      setError("Enter a valid EVM wallet address.");
+      return;
+    }
+
+    setError("");
 
     if (next === wallet) {
-      loadWallet(next);
+      setRefreshKey((current) => current + 1);
       return;
     }
 

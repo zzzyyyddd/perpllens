@@ -17,66 +17,108 @@ type Result = {
   trades?: Trade[];
 };
 
+type LoadState = "loading" | "success" | "unavailable";
+
 export default function PerplRecentTrades({
   accountId,
 }: {
   accountId: string;
 }) {
   const [data, setData] = useState<Result | null>(null);
-  const [error, setError] = useState("");
+  const [state, setState] = useState<LoadState>("loading");
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
 
     setData(null);
-    setError("");
+    setState("loading");
 
-    fetch(
-      `/api/perpl/recent-trades?accountId=${encodeURIComponent(accountId)}`,
-      { signal: controller.signal },
-    )
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
-      })
-      .then(setData)
-      .catch((err) => {
-        if (!controller.signal.aborted) setError(String(err));
-      });
+    const timeout = setTimeout(() => {
+      controller.abort();
+      if (active) setState("unavailable");
+    }, 12000);
 
-    return () => controller.abort();
+    async function load() {
+      try {
+        const response = await fetch(
+          `/api/perpl/recent-trades?accountId=${encodeURIComponent(accountId)}`,
+          {
+            signal: controller.signal,
+            cache: "no-store",
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Verification request failed");
+        }
+
+        const result: Result = await response.json();
+
+        if (result.status !== "ok" || !Array.isArray(result.trades)) {
+          throw new Error("Incomplete verification response");
+        }
+
+        if (active && !controller.signal.aborted) {
+          setData(result);
+          setState("success");
+        }
+      } catch {
+        if (active) setState("unavailable");
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    void load();
+
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      controller.abort();
+    };
   }, [accountId]);
 
   return (
     <section className="border-t border-white/10 px-6 py-5">
-      <h3 className="text-sm font-semibold">Verified Recent Trades</h3>
+      <h3 className="text-sm font-semibold">
+        Verified Recent Trades
+      </h3>
+
       <p className="mt-1 text-xs text-amber-300">
-        Recent sample only — not full wallet history
+        Verified recent sample only — not complete trading history.
       </p>
 
-      {!data && !error && (
-        <p className="mt-4 text-sm text-zinc-500">
-          Verifying recent trades...
+      {state === "loading" && (
+        <p className="mt-4 text-sm text-zinc-400" role="status">
+          Verifying recent trades. This may take a few seconds...
         </p>
       )}
 
-      {error && (
-        <p className="mt-4 text-sm text-red-400">
-          Verification unavailable: {error}
-        </p>
+      {state === "unavailable" && (
+        <div className="mt-4 space-y-1" role="status">
+          <p className="text-sm text-amber-300">
+            Recent trade verification is temporarily unavailable.
+          </p>
+          <p className="text-xs text-zinc-500">
+            Wallet and position data remain available.
+            No trading history has been inferred.
+          </p>
+        </div>
       )}
 
-      {data?.status === "ok" && (
+      {state === "success" && data && (
         <div className="mt-4 space-y-3">
           <p className="text-xs text-zinc-500">
-            {data.trades?.length ?? 0} reconstructed trades
-            from {data.candidateCount ?? 0} candidates
+            {data.trades?.length ?? 0} verified trades from{" "}
+            {data.candidateCount ?? 0} recent candidates.
+            This is not a lifetime trade count.
           </p>
 
           {data.trades?.map((trade, index) => (
             <div
-              key={index}
-              className="flex items-center justify-between border border-white/10 p-3"
+              key={`${trade.perpId}-${index}`}
+              className="flex items-center justify-between rounded-lg border border-white/10 p-3"
             >
               <div>
                 <p className="text-sm">Perp #{trade.perpId}</p>
@@ -84,6 +126,7 @@ export default function PerplRecentTrades({
                   {trade.holdingTimeSeconds}s · {trade.outcome}
                 </p>
               </div>
+
               <div className="text-right">
                 <p className="text-sm font-medium">
                   {trade.netPnlCNS} CNS
@@ -96,8 +139,10 @@ export default function PerplRecentTrades({
           ))}
 
           {data.trades?.length === 0 && (
-            <p className="text-sm text-zinc-500">
-              No recent trades verified in this sample.
+            <p className="text-sm text-zinc-400">
+              No completed trades could be verified in this
+              recent sample. This does not mean the wallet
+              has never traded.
             </p>
           )}
         </div>
