@@ -5,6 +5,28 @@
 PerplLens turns live Perpl market data, Monad mainnet account state, and indexed trading events into a focused analytics layer for traders, researchers, and risk teams.
 
 **Live app:** https://perpllens.vercel.app
+
+### Try the Live Demo
+
+PerplLens runs on Monad mainnet and can be explored without
+connecting a wallet or signing a transaction.
+
+1. Open the live application.
+2. Navigate to **Trader Intelligence**.
+3. Click **Try Demo Wallet**.
+4. Inspect the onchain account and its current positions.
+5. Wait for **Verified Recent Trades** to reconstruct completed
+   position lifecycles from Envio-indexed Monad events.
+6. Explore **Trader Performance**, including sample win rate,
+   profit factor, net realized PnL, and cumulative PnL.
+
+**Demo account:** Perpl account `#5437`
+**Demo wallet:** `0xFfd3107aa7cc055AA5D9864Bc5CAe4c181f317fb`
+
+Historical verification may take 10–30 seconds on an uncached
+request. If the index is temporarily unavailable, use
+**Retry Verification**.
+
 **Network:** Monad Mainnet · Chain ID `143`
 **Perpl Exchange:** `0x34B6552d57a35a1D042CcAe1951BD1C370112a6F`
 
@@ -67,6 +89,37 @@ PerplLens includes an Envio-based event indexing and reconstruction pipeline for
 - completed-trade history
 
 Historical values are never mocked. If the historical index is unreachable, the UI reports **Historical index unavailable** and hides historical metrics while live Monad data remains operational.
+
+## Verified Recent Trades & Trader Performance
+
+The production dashboard includes a bounded, verified sample
+of recently completed Perpl trades.
+
+For each verified trade, the reconstruction pipeline accounts
+for realized PnL, funding, and attributable taker fees.
+
+The dashboard calculates the following metrics from this
+verified sample:
+
+- Verified completed trades
+- Sample win rate
+- Sample profit factor
+- Sample net realized PnL
+- Cumulative realized PnL curve
+
+**Important scope limitation:** These metrics describe only
+the verified recent sample. They are not lifetime statistics,
+and the displayed trade count is not the account's total
+historical trade count.
+
+The historical reconstruction engine supports broader
+event processing, but the recent-trades dashboard does not
+claim complete account history.
+
+If verification fails or times out, PerplLens displays an
+unavailable state rather than inventing transactions or
+performance metrics. Live wallet and market data remain
+independent of this verification path.
 
 ## Fee-Aware Trade Reconstruction
 
@@ -200,6 +253,7 @@ The historical UI fails closed when its configured GraphQL endpoint cannot be re
 | `/api/perpl/candles` | Perpl candle history |
 | `/api/perpl/wallet` | Monad mainnet wallet/account intelligence |
 | `/api/perpl/analytics` | Indexed historical trader analytics |
+| `/api/perpl/recent-trades` | Verified recent completed trades and sample performance analytics |
 | `/api/perpl/account` | Server-side authenticated Perpl account integration |
 
 Authenticated Perpl credentials remain server-side and are never intentionally exposed to the browser.
