@@ -42,6 +42,7 @@ export default function PerplRecentTrades({
 }) {
   const [data, setData] = useState<Result | null>(null);
   const [state, setState] = useState<LoadState>("loading");
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,7 +54,7 @@ export default function PerplRecentTrades({
     const timeout = setTimeout(() => {
       controller.abort();
       if (active) setState("unavailable");
-    }, 12000);
+    }, 30000);
 
     async function load() {
       try {
@@ -93,7 +94,7 @@ export default function PerplRecentTrades({
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [accountId]);
+  }, [accountId, retryCount]);
 
   return (
     <section className="border-t border-white/10 px-6 py-5">
@@ -120,6 +121,13 @@ export default function PerplRecentTrades({
             Wallet and position data remain available.
             No trading history has been inferred.
           </p>
+          <button
+            type="button"
+            onClick={() => setRetryCount((count) => count + 1)}
+            className="mt-3 rounded-lg border border-white/20 px-4 py-2 text-sm text-white transition hover:bg-white/10"
+          >
+            Retry Verification
+          </button>
         </div>
       )}
 

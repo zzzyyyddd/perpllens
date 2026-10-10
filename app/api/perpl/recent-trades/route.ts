@@ -39,11 +39,17 @@ export async function GET(request: NextRequest) {
     const candidates = await findRecentTradeCandidates(accountId);
     const verified = [];
 
-    for (const candidate of candidates.slice(0, 1)) {
+    const selected = candidates.slice(0, 3);
+
+    async function verifyRange(
+      fromBlock: string,
+      toBlock: string,
+      allowedCandidates: Set<string>,
+    ) {
       const rows = await fetchLifecycleBlockRange(
         accountId,
-        candidate.fromBlock,
-        candidate.toBlock,
+        fromBlock,
+        toBlock,
       );
 
       const hashes = [...new Set(
@@ -61,15 +67,61 @@ export async function GET(request: NextRequest) {
         takerFills,
       );
 
-      const trades = buildCompletedTrades({
+      return buildCompletedTrades({
         lifecycles,
         lifecycleEvents,
         attributedFills,
-      });
+      }).filter((trade) =>
+        allowedCandidates.has(
+          [
+            trade.perpId.toString(),
+            trade.openingTransactionHash.toLowerCase(),
+            trade.closingTransactionHash.toLowerCase(),
+          ].join(":"),
+        )
+      );
+    }
 
-      verified.push(...trades.filter(
-        (trade) => trade.perpId.toString() === candidate.perpId,
-      ));
+    if (selected.length > 0) {
+      const minBlock = selected.reduce(
+        (min, c) => BigInt(c.fromBlock) < min
+          ? BigInt(c.fromBlock) : min,
+        BigInt(selected[0].fromBlock),
+      );
+
+      const maxBlock = selected.reduce(
+        (max, c) => BigInt(c.toBlock) > max
+          ? BigInt(c.toBlock) : max,
+        BigInt(selected[0].toBlock),
+      );
+
+      if (maxBlock - minBlock <= BigInt(5000)) {
+        verified.push(...await verifyRange(
+          minBlock.toString(),
+          maxBlock.toString(),
+          new Set(selected.map((c) =>
+            [
+              c.perpId,
+              c.openingTransactionHash.toLowerCase(),
+              c.closingTransactionHash.toLowerCase(),
+            ].join(":"),
+          )),
+        ));
+      } else {
+        for (const candidate of selected) {
+          verified.push(...await verifyRange(
+            candidate.fromBlock,
+            candidate.toBlock,
+            new Set([
+              [
+                candidate.perpId,
+                candidate.openingTransactionHash.toLowerCase(),
+                candidate.closingTransactionHash.toLowerCase(),
+              ].join(":"),
+            ]),
+          ));
+        }
+      }
     }
 
     const unique = [...new Map(

@@ -34,12 +34,20 @@ export async function findRecentTradeCandidates(accountId: string) {
 
       return {
         perpId: l.perpId.toString(),
+        openingTransactionHash: l.openingTransactionHash,
+        closingTransactionHash: l.closingTransactionHash,
         fromBlock: opening?.blockNumber.toString(),
         toBlock: closing?.blockNumber.toString(),
       };
     })
     .filter(
-      (c): c is { perpId: string; fromBlock: string; toBlock: string } =>
+      (c): c is {
+        perpId: string;
+        openingTransactionHash: string;
+        closingTransactionHash: string;
+        fromBlock: string;
+        toBlock: string;
+      } =>
         Boolean(c.fromBlock && c.toBlock),
     );
 }
