@@ -19,6 +19,22 @@ type Result = {
 
 type LoadState = "loading" | "success" | "unavailable";
 
+function formatCNS(value: string): string {
+  const raw = BigInt(value);
+  const negative = raw < BigInt(0);
+  const absolute = negative ? -raw : raw;
+
+  const whole = absolute / BigInt(1000000);
+  const fraction = (absolute % BigInt(1000000))
+    .toString()
+    .padStart(6, "0")
+    .replace(/0+$/, "");
+
+  return `${negative ? "-" : ""}${whole.toLocaleString("en-US")}${
+    fraction ? "." + fraction : ""
+  }`;
+}
+
 export default function PerplRecentTrades({
   accountId,
 }: {
@@ -129,10 +145,10 @@ export default function PerplRecentTrades({
 
               <div className="text-right">
                 <p className="text-sm font-medium">
-                  {trade.netPnlCNS} CNS
+                  {formatCNS(trade.netPnlCNS)} CNS
                 </p>
                 <p className="text-xs text-zinc-500">
-                  Fees: {trade.takerFeesCNS} CNS
+                  Fees: {formatCNS(trade.takerFeesCNS)} CNS
                 </p>
               </div>
             </div>
