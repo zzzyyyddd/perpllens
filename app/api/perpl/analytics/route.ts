@@ -83,6 +83,8 @@ export async function GET(request: NextRequest) {
         accountId: bigintString(trade.accountId),
         perpId: bigintString(trade.perpId),
         side: trade.side,
+        openingTransactionHash: trade.openingTransactionHash,
+        closingTransactionHash: trade.closingTransactionHash,
         openedAt: bigintString(trade.openedAt),
         closedAt: bigintString(trade.closedAt),
         holdingTimeSeconds: bigintString(
